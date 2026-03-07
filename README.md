@@ -4,41 +4,81 @@
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![CI](https://github.com/hgDendi/sandboxmatrix/actions/workflows/ci.yml/badge.svg)](https://github.com/hgDendi/sandboxmatrix/actions/workflows/ci.yml)
 
+> **sandboxMatrix is to AI Agents what Kubernetes is to microservices.**
+
 Open-source, local-first AI sandbox orchestrator with pluggable isolation and MCP integration.
+
+## Why sandboxMatrix
+
+AI coding agents need isolated, reproducible environments to safely execute code, install packages, and manage projects. Current solutions are either cloud-only, require Kubernetes, or lack AI-native features.
+
+| | E2B | Modal | Daytona | DevPod | **sandboxMatrix** |
+|---|---|---|---|---|---|
+| Open source | Partial | No | Yes | Yes | **Yes** |
+| Local-first | No | No | No | Yes | **Yes** |
+| MCP integration | No | No | Partial | No | **10 tools** |
+| Multi-sandbox orchestration | No | No | No | No | **Matrix** |
+| Agent-to-agent messaging | No | No | No | No | **A2A Gateway** |
+| Snapshot/restore | Yes | No | No | No | **Yes** |
+| GPU passthrough | No | Yes | No | No | **Yes** |
+| Pluggable runtimes | No | No | No | No | **Docker/gVisor/Firecracker** |
+| REST API + Web Dashboard | Yes | Yes | Yes | No | **Yes** |
+| Pre-warmed pools | Yes | Yes | No | No | **Yes** |
+
+## Cloud Native Mapping
+
+sandboxMatrix brings Kubernetes-inspired concepts to AI agent workflows:
+
+```
+Cloud Native              AI Agent Development
+──────────────            ──────────────────────
+Kubernetes         ->     sandboxMatrix
+Pod                ->     Sandbox
+Namespace          ->     Matrix
+PersistentVolume   ->     Workspace
+Job                ->     Session
+CRI (containerd)   ->     Runtime Interface (Docker/gVisor/Firecracker)
+Helm Chart         ->     Blueprint
+```
 
 ## Features
 
 - **Docker sandbox lifecycle** -- create, start, stop, destroy, exec, and inspect containers
 - **Snapshot and restore** -- point-in-time snapshots via Docker commit with tag-based management
-- **Matrix orchestration** -- coordinate multiple sandboxes as a single unit with shared lifecycle
+- **Matrix orchestration** -- coordinate multiple sandboxes as a single unit with isolated networking
 - **MCP server** -- 10 built-in tools for AI agent integration over the Model Context Protocol (stdio)
+- **REST API server** -- 20+ JSON endpoints for programmatic access
+- **Web dashboard** -- real-time dark-theme management UI with auto-refresh
 - **Session management** -- bounded execution contexts for agent workflows with exec tracking
 - **A2A messaging** -- agent-to-agent send, receive, and broadcast gateway
+- **Pre-warmed pools** -- instant sandbox creation from pre-warmed container pools
+- **GPU passthrough** -- NVIDIA GPU support for AI workloads (PyTorch, CUDA)
 - **Resource monitoring** -- live CPU and memory statistics per sandbox
-- **Blueprint system** -- declarative YAML environment definitions with validation and inspection
-- **Pluggable runtime architecture** -- designed for Docker, gVisor, Firecracker, and WASM backends
-- **File-based persistent state** -- sandbox, session, and matrix state survives restarts
-- **Network policies** -- configurable per-blueprint (expose ports, bridge, isolate)
+- **Blueprint system** -- declarative YAML environment definitions with validation
+- **Pluggable runtime architecture** -- Docker, gVisor, Firecracker backends
+- **Network policies** -- configurable per-blueprint (none, host, bridge, isolate)
+- **Persistent state** -- file-based JSON or BoltDB storage survives restarts
+- **SDKs** -- Python and TypeScript clients for programmatic access
 
 ## Architecture
 
 ```
-┌──────────────────────────────────────────────────────────┐
-│                    Interface Layer                        │
-│  CLI (smx)  │  REST/gRPC API  │  SDKs  │  Web UI        │
-├──────────────────────────────────────────────────────────┤
-│                    Agent Plane                           │
-│  MCP Server  │  MCP Client  │  A2A Gateway              │
-├──────────────────────────────────────────────────────────┤
-│                    Control Plane                         │
-│  API Server  │  Scheduler  │  State Manager              │
-├──────────────────────────────────────────────────────────┤
-│                    Runtime Plane (pluggable)             │
-│  Docker  │  Firecracker  │  gVisor  │  Kata  │  WASM    │
-├──────────────────────────────────────────────────────────┤
-│                    Storage Plane                         │
-│  Workspaces  │  Snapshots  │  Templates  │  State        │
-└──────────────────────────────────────────────────────────┘
++--------------------------------------------------------------+
+|                      Interface Layer                          |
+|  CLI (smx)  |  REST API  |  SDKs (Go/Python/TS)  |  Web UI  |
++--------------------------------------------------------------+
+|                      Agent Plane                              |
+|  MCP Server  |  MCP Client  |  A2A Gateway                   |
++--------------------------------------------------------------+
+|                      Control Plane                            |
+|  API Server  |  Scheduler  |  State Manager  |  Pool Manager  |
++--------------------------------------------------------------+
+|                      Runtime Plane (pluggable)                |
+|  Docker  |  Firecracker  |  gVisor  |  Kata  |  WASM         |
++--------------------------------------------------------------+
+|                      Storage Plane                            |
+|  Workspaces  |  Snapshots  |  Templates  |  State (JSON/Bolt) |
++--------------------------------------------------------------+
 ```
 
 ## Quick Start
@@ -79,6 +119,16 @@ cd sandboxmatrix && make build
 # MCP server for AI agents
 ./bin/smx mcp serve
 
+# REST API server
+./bin/smx server start --addr :8080
+
+# Web dashboard
+./bin/smx dashboard --addr :9090
+
+# Pre-warm sandbox pools
+./bin/smx pool warm --blueprint blueprints/python-dev.yaml --min 3
+./bin/smx pool stats
+
 # Cleanup
 ./bin/smx sandbox destroy my-sandbox
 ./bin/smx sandbox destroy restored
@@ -88,6 +138,7 @@ cd sandboxmatrix && make build
 
 | Command | Alias | Description |
 |---|---|---|
+| **Sandbox** | | |
 | `smx sandbox create` | `sb create` | Create and start a sandbox from a blueprint |
 | `smx sandbox list` | `sb ls` | List all sandboxes |
 | `smx sandbox start <name>` | | Start a stopped sandbox |
@@ -95,26 +146,37 @@ cd sandboxmatrix && make build
 | `smx sandbox destroy <name>` | `sb rm` | Destroy a sandbox |
 | `smx sandbox exec <name> -- <cmd>` | | Execute a command in a sandbox |
 | `smx sandbox inspect <name>` | | Show detailed sandbox information |
-| `smx sandbox stats <name>` | | Show CPU/memory usage for a sandbox |
+| `smx sandbox stats <name>` | | Show CPU/memory usage |
 | `smx sandbox snapshot <name>` | | Create a point-in-time snapshot |
-| `smx sandbox snapshots <name>` | | List snapshots of a sandbox |
-| `smx sandbox restore <name>` | | Restore a sandbox from a snapshot |
+| `smx sandbox snapshots <name>` | | List snapshots |
+| `smx sandbox restore <name>` | | Restore from a snapshot |
+| `smx sandbox gpu-check <name>` | | Check GPU availability (nvidia-smi) |
+| **Matrix** | | |
 | `smx matrix create <name>` | `mx create` | Create a multi-sandbox matrix |
 | `smx matrix list` | `mx ls` | List all matrices |
-| `smx matrix inspect <name>` | | Show detailed matrix information |
+| `smx matrix inspect <name>` | | Show matrix details |
 | `smx matrix start <name>` | | Start all sandboxes in a matrix |
 | `smx matrix stop <name>` | | Stop all sandboxes in a matrix |
-| `smx matrix destroy <name>` | `mx rm` | Destroy a matrix and all its sandboxes |
-| `smx session start <sandbox>` | | Start a new session for a sandbox |
+| `smx matrix destroy <name>` | `mx rm` | Destroy matrix and all sandboxes |
+| **Session** | | |
+| `smx session start <sandbox>` | | Start a new session |
 | `smx session end <id>` | | End a session |
-| `smx session list` | `session ls` | List sessions (optionally filter by sandbox) |
-| `smx session exec <id> -- <cmd>` | | Execute a command within a session |
-| `smx blueprint validate <file>` | `bp validate` | Validate a blueprint YAML file |
-| `smx blueprint inspect <file>` | `bp inspect` | Display details of a blueprint |
-| `smx mcp serve` | | Start the MCP server on stdio |
+| `smx session list` | `session ls` | List sessions |
+| `smx session exec <id> -- <cmd>` | | Execute within a session |
+| **Pool** | | |
+| `smx pool warm` | | Pre-warm sandbox instances |
+| `smx pool stats` | | Show pool statistics |
+| `smx pool drain` | | Destroy all warm instances |
+| **Server** | | |
+| `smx server start` | | Start the REST API server |
+| `smx dashboard` | | Start the web dashboard |
+| `smx mcp serve` | | Start the MCP server (stdio) |
+| **Other** | | |
+| `smx blueprint validate <file>` | `bp validate` | Validate a blueprint YAML |
+| `smx blueprint inspect <file>` | `bp inspect` | Display blueprint details |
 | `smx a2a send` | | Send a message between sandboxes |
-| `smx a2a receive <sandbox>` | | Receive pending messages for a sandbox |
-| `smx a2a broadcast` | | Broadcast a message to multiple sandboxes |
+| `smx a2a receive <sandbox>` | | Receive pending messages |
+| `smx a2a broadcast` | | Broadcast to multiple sandboxes |
 | `smx version` | | Print version information |
 
 ## MCP Tools
@@ -134,9 +196,9 @@ The MCP server (`smx mcp serve`) exposes 10 tools over stdio for AI agent integr
 | `a2a_receive` | Receive pending messages for a sandbox (clears inbox) |
 | `a2a_broadcast` | Broadcast a message to multiple sandboxes |
 
-### MCP configuration example
+### MCP configuration
 
-Add to your AI agent's MCP config (e.g., Claude Desktop):
+Add to your AI agent's MCP config (e.g., Claude Code, Claude Desktop):
 
 ```json
 {
@@ -149,18 +211,9 @@ Add to your AI agent's MCP config (e.g., Claude Desktop):
 }
 ```
 
-## Core Concepts
+## Blueprint Examples
 
-| sandboxMatrix | Kubernetes Analog | Purpose |
-|---|---|---|
-| **Sandbox** | Pod | Isolated dev environment unit |
-| **Blueprint** | PodTemplate | Reusable environment definition |
-| **Workspace** | PersistentVolume | Project files and state |
-| **Toolchain** | Sidecar | Dev tools (LSP, git, compilers) |
-| **Session** | Job | Bounded AI agent execution context |
-| **Matrix** | Namespace | Group of coordinated sandboxes |
-
-## Blueprint Example
+Sandbox blueprint:
 
 ```yaml
 apiVersion: smx/v1alpha1
@@ -186,7 +239,30 @@ spec:
     expose: [8000]
 ```
 
-Matrix blueprints can define multiple coordinated members:
+GPU-enabled blueprint:
+
+```yaml
+apiVersion: smx/v1alpha1
+kind: Blueprint
+metadata:
+  name: gpu-python-dev
+  version: "1.0.0"
+spec:
+  base: nvidia/cuda:12.4.1-runtime-ubuntu22.04
+  runtime: docker
+  resources:
+    cpu: "4"
+    memory: 8Gi
+    gpu:
+      count: 1
+      driver: nvidia
+  setup:
+    - run: pip3 install torch torchvision
+  workspace:
+    mountPath: /workspace
+```
+
+Matrix blueprint:
 
 ```yaml
 apiVersion: smx/v1alpha1
@@ -211,17 +287,17 @@ make test-cover   # Run tests with coverage report
 make lint         # Run golangci-lint
 make fmt          # Format code (go fmt + goimports)
 make vet          # Run go vet
-make e2e          # Run end-to-end tests
+make e2e          # Run end-to-end tests (requires Docker)
 make clean        # Remove build artifacts
 ```
 
 ## Roadmap
 
 - [x] **Phase 1** -- CLI scaffolding, Docker sandbox lifecycle, blueprint system
-- [x] **Phase 2** -- Snapshot/restore, resource stats, sandbox inspect
-- [x] **Phase 3** -- MCP server, Matrix orchestration, session management, A2A gateway
-- [ ] **Phase 4** -- Firecracker/gVisor backends, network policies, REST API, SDKs
-- [ ] **Phase 5** -- Multi-node scheduling, GPU passthrough, K8s operator, web dashboard
+- [x] **Phase 2** -- Snapshot/restore, MCP server, session management, Matrix orchestration
+- [x] **Phase 3** -- Network policies, gVisor/Firecracker runtimes, A2A gateway
+- [x] **Phase 4** -- REST API server, web dashboard, pre-warmed pools, GPU passthrough, SDKs
+- [ ] **Phase 5** -- Multi-node scheduling, K8s operator, distributed state, RBAC
 
 ## Contributing
 
