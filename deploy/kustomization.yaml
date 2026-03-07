@@ -1,0 +1,19 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: sandboxmatrix
+
+resources:
+  - namespace.yaml
+  - crds/sandbox-crd.yaml
+  - crds/matrix-crd.yaml
+  - crds/blueprint-crd.yaml
+  - rbac.yaml
+  - deployment.yaml
+
+commonLabels:
+  app.kubernetes.io/part-of: sandboxmatrix
+
+images:
+  - name: ghcr.io/hgdendi/sandboxmatrix
+    newTag: latest

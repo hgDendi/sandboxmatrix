@@ -1,0 +1,48 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sandboxmatrix-operator
+  namespace: sandboxmatrix
+  labels:
+    app: sandboxmatrix-operator
+    app.kubernetes.io/name: sandboxmatrix-operator
+    app.kubernetes.io/part-of: sandboxmatrix
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: sandboxmatrix-operator
+  template:
+    metadata:
+      labels:
+        app: sandboxmatrix-operator
+    spec:
+      serviceAccountName: sandboxmatrix-operator
+      containers:
+        - name: operator
+          image: ghcr.io/hgdendi/sandboxmatrix:latest
+          command: ["smx", "operator", "start"]
+          env:
+            - name: SMX_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8081
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8081
+            initialDelaySeconds: 5
+            periodSeconds: 10

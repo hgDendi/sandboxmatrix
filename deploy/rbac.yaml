@@ -1,0 +1,81 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: sandboxmatrix-operator
+  namespace: sandboxmatrix
+  labels:
+    app.kubernetes.io/name: sandboxmatrix-operator
+    app.kubernetes.io/part-of: sandboxmatrix
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: sandboxmatrix-operator
+  labels:
+    app.kubernetes.io/name: sandboxmatrix-operator
+    app.kubernetes.io/part-of: sandboxmatrix
+rules:
+  # Sandbox CRD permissions
+  - apiGroups: ["smx.sandboxmatrix.dev"]
+    resources: ["sandboxes"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["smx.sandboxmatrix.dev"]
+    resources: ["sandboxes/status"]
+    verbs: ["get", "update", "patch"]
+  - apiGroups: ["smx.sandboxmatrix.dev"]
+    resources: ["sandboxes/finalizers"]
+    verbs: ["update"]
+
+  # Matrix CRD permissions
+  - apiGroups: ["smx.sandboxmatrix.dev"]
+    resources: ["matrices"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["smx.sandboxmatrix.dev"]
+    resources: ["matrices/status"]
+    verbs: ["get", "update", "patch"]
+  - apiGroups: ["smx.sandboxmatrix.dev"]
+    resources: ["matrices/finalizers"]
+    verbs: ["update"]
+
+  # Blueprint CRD permissions
+  - apiGroups: ["smx.sandboxmatrix.dev"]
+    resources: ["blueprints"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["smx.sandboxmatrix.dev"]
+    resources: ["blueprints/status"]
+    verbs: ["get", "update", "patch"]
+  - apiGroups: ["smx.sandboxmatrix.dev"]
+    resources: ["blueprints/finalizers"]
+    verbs: ["update"]
+
+  # Core resources needed by the operator
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["create", "patch"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+  # Leader election
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: sandboxmatrix-operator
+  labels:
+    app.kubernetes.io/name: sandboxmatrix-operator
+    app.kubernetes.io/part-of: sandboxmatrix
+subjects:
+  - kind: ServiceAccount
+    name: sandboxmatrix-operator
+    namespace: sandboxmatrix
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: sandboxmatrix-operator

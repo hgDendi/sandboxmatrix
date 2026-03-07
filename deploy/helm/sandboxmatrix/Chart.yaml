@@ -1,0 +1,16 @@
+apiVersion: v2
+name: sandboxmatrix
+description: A Helm chart for the sandboxMatrix Kubernetes operator
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords:
+  - sandbox
+  - ai
+  - development-environment
+  - operator
+home: https://github.com/hg-dendi/sandboxmatrix
+sources:
+  - https://github.com/hg-dendi/sandboxmatrix
+maintainers:
+  - name: sandboxmatrix

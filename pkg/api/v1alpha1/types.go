@@ -165,3 +165,29 @@ type Matrix struct {
 	Members  []MatrixMember `json:"members" yaml:"members"`
 	State    MatrixState    `json:"state" yaml:"state"`
 }
+
+// Role defines a set of permissions.
+type Role string
+
+const (
+	RoleAdmin    Role = "admin"    // Full access
+	RoleOperator Role = "operator" // Create/manage sandboxes, no admin
+	RoleViewer   Role = "viewer"   // Read-only access
+)
+
+// User represents an authenticated user.
+type User struct {
+	Name  string `json:"name" yaml:"name"`
+	Role  Role   `json:"role" yaml:"role"`
+	Token string `json:"token,omitempty" yaml:"token,omitempty"`
+}
+
+// AuditEntry records an action taken.
+type AuditEntry struct {
+	Timestamp time.Time `json:"timestamp"`
+	User      string    `json:"user"`
+	Action    string    `json:"action"`   // e.g., "sandbox.create", "matrix.destroy"
+	Resource  string    `json:"resource"` // e.g., "sandbox/my-sandbox"
+	Result    string    `json:"result"`   // "success" or "denied" or "error"
+	Detail    string    `json:"detail,omitempty"`
+}

@@ -1,0 +1,42 @@
+# Default values for sandboxmatrix.
+
+replicaCount: 1
+
+image:
+  repository: ghcr.io/hgdendi/sandboxmatrix
+  tag: latest
+  pullPolicy: IfNotPresent
+
+nameOverride: ""
+fullnameOverride: ""
+
+namespace: sandboxmatrix
+
+serviceAccount:
+  # Specifies whether a service account should be created
+  create: true
+  # The name of the service account to use
+  name: sandboxmatrix-operator
+
+operator:
+  # Additional arguments passed to the operator
+  args: []
+  # Namespace to watch (empty string = all namespaces)
+  watchNamespace: "sandboxmatrix"
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+# Install CRDs with the chart
+installCRDs: true
