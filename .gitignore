@@ -35,3 +35,5 @@ coverage.html
 # State
 *.db
 *.bolt
+__pycache__/
+*.pyc
