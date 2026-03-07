@@ -29,6 +29,7 @@ type ctrlMockContainer struct {
 type ctrlMockRuntime struct {
 	mu         sync.Mutex
 	containers map[string]*ctrlMockContainer
+	networks   map[string]bool // name -> internal flag
 	nextID     int
 
 	// Optional hooks – when non-nil they override default behaviour so tests
@@ -201,6 +202,25 @@ func (m *ctrlMockRuntime) ListSnapshots(_ context.Context, _ string) ([]runtime.
 }
 
 func (m *ctrlMockRuntime) DeleteSnapshot(_ context.Context, _ string) error {
+	return nil
+}
+
+func (m *ctrlMockRuntime) CreateNetwork(_ context.Context, name string, internal bool) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.networks == nil {
+		m.networks = make(map[string]bool)
+	}
+	m.networks[name] = internal
+	return nil
+}
+
+func (m *ctrlMockRuntime) DeleteNetwork(_ context.Context, name string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.networks != nil {
+		delete(m.networks, name)
+	}
 	return nil
 }
 

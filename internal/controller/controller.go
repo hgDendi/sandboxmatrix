@@ -31,6 +31,7 @@ type CreateOptions struct {
 	Name          string
 	BlueprintPath string
 	WorkspaceDir  string
+	NetworkName   string // optional: override network (e.g. for matrix isolation)
 }
 
 // Create creates a new sandbox from a blueprint.
@@ -56,6 +57,30 @@ func (c *Controller) Create(ctx context.Context, opts CreateOptions) (*v1alpha1.
 			"sandboxmatrix/sandbox": opts.Name,
 			"sandboxmatrix/blueprint": bp.Metadata.Name,
 		},
+	}
+
+	// Network policy.
+	if opts.NetworkName != "" {
+		// Explicit network name takes precedence (e.g. matrix isolation).
+		cfg.Network.Mode = opts.NetworkName
+	} else {
+		switch bp.Spec.Network.Policy {
+		case v1alpha1.NetworkPolicyNone:
+			cfg.Network.Mode = "none"
+		case v1alpha1.NetworkPolicyHost:
+			cfg.Network.Mode = "host"
+		case v1alpha1.NetworkPolicyIsolate:
+			cfg.Network.Mode = "none" // isolated per-sandbox; no external access
+		case v1alpha1.NetworkPolicyBridge, "":
+			cfg.Network.Mode = "bridge"
+		default:
+			cfg.Network.Mode = string(bp.Spec.Network.Policy)
+		}
+	}
+
+	// Allow DNS resolution when requested alongside restrictive policies.
+	if bp.Spec.Network.AllowDNS {
+		cfg.Network.DNS = []string{"8.8.8.8", "8.8.4.4"}
 	}
 
 	// Port mappings.

@@ -30,6 +30,7 @@ isolated development environments with pluggable runtime backends.`,
 		newVersionCmd(),
 		newBlueprintCmd(),
 		newMCPCmd(),
+		newA2ACmd(),
 	)
 
 	// Runtime commands require Docker; initialize lazily on use.

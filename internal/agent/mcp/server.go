@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hg-dendi/sandboxmatrix/internal/agent/a2a"
 	"github.com/hg-dendi/sandboxmatrix/internal/controller"
 	"github.com/hg-dendi/sandboxmatrix/internal/runtime"
 	"github.com/mark3labs/mcp-go/mcp"
@@ -20,11 +21,12 @@ import (
 type Server struct {
 	mcpServer *server.MCPServer
 	ctrl      *controller.Controller
+	gateway   *a2a.Gateway
 }
 
-// NewServer creates a new MCP server backed by the given controller.
-func NewServer(ctrl *controller.Controller) *Server {
-	s := &Server{ctrl: ctrl}
+// NewServer creates a new MCP server backed by the given controller and A2A gateway.
+func NewServer(ctrl *controller.Controller, gateway *a2a.Gateway) *Server {
+	s := &Server{ctrl: ctrl, gateway: gateway}
 
 	s.mcpServer = server.NewMCPServer(
 		"sandboxmatrix",
@@ -126,6 +128,66 @@ func (s *Server) registerTools() {
 			),
 		),
 		s.handleSandboxStats,
+	)
+
+	// a2a_send
+	s.mcpServer.AddTool(
+		mcp.NewTool("a2a_send",
+			mcp.WithDescription("Send an agent-to-agent message from one sandbox to another"),
+			mcp.WithString("from",
+				mcp.Required(),
+				mcp.Description("Sender sandbox name"),
+			),
+			mcp.WithString("to",
+				mcp.Required(),
+				mcp.Description("Recipient sandbox name"),
+			),
+			mcp.WithString("type",
+				mcp.Required(),
+				mcp.Description("Message type (e.g., request, response, event)"),
+			),
+			mcp.WithString("payload",
+				mcp.Required(),
+				mcp.Description("Message payload (JSON string)"),
+			),
+		),
+		s.handleA2ASend,
+	)
+
+	// a2a_receive
+	s.mcpServer.AddTool(
+		mcp.NewTool("a2a_receive",
+			mcp.WithDescription("Receive pending agent-to-agent messages for a sandbox (clears inbox)"),
+			mcp.WithString("sandbox_name",
+				mcp.Required(),
+				mcp.Description("Sandbox name to receive messages for"),
+			),
+		),
+		s.handleA2AReceive,
+	)
+
+	// a2a_broadcast
+	s.mcpServer.AddTool(
+		mcp.NewTool("a2a_broadcast",
+			mcp.WithDescription("Broadcast a message to multiple sandboxes"),
+			mcp.WithString("from",
+				mcp.Required(),
+				mcp.Description("Sender sandbox name"),
+			),
+			mcp.WithString("targets",
+				mcp.Required(),
+				mcp.Description("Comma-separated list of target sandbox names"),
+			),
+			mcp.WithString("type",
+				mcp.Required(),
+				mcp.Description("Message type (e.g., request, response, event)"),
+			),
+			mcp.WithString("payload",
+				mcp.Required(),
+				mcp.Description("Message payload (JSON string)"),
+			),
+		),
+		s.handleA2ABroadcast,
 	)
 }
 
@@ -301,4 +363,89 @@ func (s *Server) handleSandboxStats(ctx context.Context, request mcp.CallToolReq
 
 	text := fmt.Sprintf("CPU:     %.1f%%\nMemory:  %.1f MiB / %.1f MiB (%.1f%%)", stats.CPUUsage, memUsageMiB, memLimitMiB, memPercent)
 	return mcp.NewToolResultText(text), nil
+}
+
+// --- A2A tool handlers ---
+
+func (s *Server) handleA2ASend(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	args := request.GetArguments()
+
+	from, _ := args["from"].(string)
+	if from == "" {
+		return mcp.NewToolResultError("parameter 'from' is required"), nil
+	}
+	to, _ := args["to"].(string)
+	if to == "" {
+		return mcp.NewToolResultError("parameter 'to' is required"), nil
+	}
+	msgType, _ := args["type"].(string)
+	if msgType == "" {
+		return mcp.NewToolResultError("parameter 'type' is required"), nil
+	}
+	payload, _ := args["payload"].(string)
+
+	msg := a2a.Message{
+		From:    from,
+		To:      to,
+		Type:    msgType,
+		Payload: payload,
+	}
+	if err := s.gateway.Send(ctx, msg); err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("failed to send message: %v", err)), nil
+	}
+
+	return mcp.NewToolResultText(fmt.Sprintf("Message sent from %q to %q (type: %s).", from, to, msgType)), nil
+}
+
+func (s *Server) handleA2AReceive(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	args := request.GetArguments()
+
+	sandboxName, _ := args["sandbox_name"].(string)
+	if sandboxName == "" {
+		return mcp.NewToolResultError("parameter 'sandbox_name' is required"), nil
+	}
+
+	msgs, err := s.gateway.Receive(ctx, sandboxName)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("failed to receive messages: %v", err)), nil
+	}
+
+	if len(msgs) == 0 {
+		return mcp.NewToolResultText("No pending messages."), nil
+	}
+
+	data, err := json.Marshal(msgs)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("failed to marshal messages: %v", err)), nil
+	}
+	return mcp.NewToolResultText(string(data)), nil
+}
+
+func (s *Server) handleA2ABroadcast(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	args := request.GetArguments()
+
+	from, _ := args["from"].(string)
+	if from == "" {
+		return mcp.NewToolResultError("parameter 'from' is required"), nil
+	}
+	targetsStr, _ := args["targets"].(string)
+	if targetsStr == "" {
+		return mcp.NewToolResultError("parameter 'targets' is required"), nil
+	}
+	msgType, _ := args["type"].(string)
+	if msgType == "" {
+		return mcp.NewToolResultError("parameter 'type' is required"), nil
+	}
+	payload, _ := args["payload"].(string)
+
+	targets := strings.Split(targetsStr, ",")
+	for i := range targets {
+		targets[i] = strings.TrimSpace(targets[i])
+	}
+
+	if err := s.gateway.Broadcast(ctx, from, targets, msgType, payload); err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("failed to broadcast: %v", err)), nil
+	}
+
+	return mcp.NewToolResultText(fmt.Sprintf("Broadcast from %q to %d targets (type: %s).", from, len(targets), msgType)), nil
 }

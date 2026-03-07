@@ -56,9 +56,21 @@ type WorkspaceSpec struct {
 	ReadOnly  bool   `json:"readOnly,omitempty" yaml:"readOnly,omitempty"`
 }
 
+// NetworkPolicy controls how a sandbox connects to the network.
+type NetworkPolicy string
+
+const (
+	NetworkPolicyNone    NetworkPolicy = "none"    // No network access
+	NetworkPolicyHost    NetworkPolicy = "host"    // Full host network
+	NetworkPolicyBridge  NetworkPolicy = "bridge"  // Default Docker bridge (default)
+	NetworkPolicyIsolate NetworkPolicy = "isolate" // Isolated network per sandbox
+)
+
 // NetworkSpec defines network configuration.
 type NetworkSpec struct {
-	Expose []int `json:"expose,omitempty" yaml:"expose,omitempty"`
+	Expose   []int         `json:"expose,omitempty" yaml:"expose,omitempty"`
+	Policy   NetworkPolicy `json:"policy,omitempty" yaml:"policy,omitempty"`
+	AllowDNS bool          `json:"allowDNS,omitempty" yaml:"allowDNS,omitempty"`
 }
 
 // BlueprintSpec defines the desired state of a sandbox environment.

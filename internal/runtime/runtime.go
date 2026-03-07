@@ -7,6 +7,12 @@ import (
 	"time"
 )
 
+// NetworkConfig holds network-related configuration for a sandbox.
+type NetworkConfig struct {
+	Mode string   // "none", "host", "bridge", or a custom network name
+	DNS  []string // custom DNS servers
+}
+
 // CreateConfig holds configuration for creating a new sandbox runtime.
 type CreateConfig struct {
 	Name      string
@@ -19,6 +25,7 @@ type CreateConfig struct {
 	Env       map[string]string
 	Cmd       []string
 	Labels    map[string]string
+	Network   NetworkConfig
 }
 
 // Mount represents a filesystem mount.
@@ -119,4 +126,11 @@ type Runtime interface {
 
 	// DeleteSnapshot removes a snapshot.
 	DeleteSnapshot(ctx context.Context, snapshotID string) error
+
+	// CreateNetwork creates a Docker network with the given name. If internal
+	// is true the network has no external connectivity.
+	CreateNetwork(ctx context.Context, name string, internal bool) error
+
+	// DeleteNetwork removes a Docker network by name.
+	DeleteNetwork(ctx context.Context, name string) error
 }

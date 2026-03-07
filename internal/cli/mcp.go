@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/hg-dendi/sandboxmatrix/internal/agent/a2a"
 	mcpserver "github.com/hg-dendi/sandboxmatrix/internal/agent/mcp"
 	"github.com/hg-dendi/sandboxmatrix/internal/controller"
 	"github.com/hg-dendi/sandboxmatrix/internal/runtime/docker"
@@ -66,8 +67,11 @@ sandboxes using the standard MCP tool-calling interface.`,
 				fmt.Fprintf(os.Stderr, "warning: state reconciliation failed: %v\n", err)
 			}
 
+			// Create the A2A gateway for agent-to-agent communication.
+			gateway := a2a.New()
+
 			// Create and start the MCP server on stdio.
-			srv := mcpserver.NewServer(ctrl)
+			srv := mcpserver.NewServer(ctrl, gateway)
 			return srv.ServeStdio()
 		},
 	}

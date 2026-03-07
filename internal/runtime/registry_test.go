@@ -30,7 +30,9 @@ func (m *mockRuntime) Restore(_ context.Context, _ string, _ CreateConfig) (stri
 func (m *mockRuntime) ListSnapshots(_ context.Context, _ string) ([]SnapshotInfo, error) {
 	return nil, nil
 }
-func (m *mockRuntime) DeleteSnapshot(_ context.Context, _ string) error { return nil }
+func (m *mockRuntime) DeleteSnapshot(_ context.Context, _ string) error             { return nil }
+func (m *mockRuntime) CreateNetwork(_ context.Context, _ string, _ bool) error      { return nil }
+func (m *mockRuntime) DeleteNetwork(_ context.Context, _ string) error              { return nil }
 
 func TestRegistry(t *testing.T) {
 	reg := NewRegistry()

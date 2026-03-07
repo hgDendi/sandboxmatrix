@@ -26,18 +26,39 @@ const (
 	labelName    = labelPrefix + "name"
 )
 
-// Runtime implements runtime.Runtime using Docker.
-type Runtime struct {
-	client *client.Client
+// Option is a functional option for configuring the Docker runtime.
+type Option func(*Runtime)
+
+// WithOCIRuntime sets the OCI runtime to use (e.g., "runsc" for gVisor).
+// When set, containers are created with this runtime instead of the default.
+func WithOCIRuntime(name string) Option {
+	return func(r *Runtime) {
+		r.ociRuntime = name
+	}
 }
 
-// New creates a new Docker runtime.
+// Runtime implements runtime.Runtime using Docker.
+type Runtime struct {
+	client     *client.Client
+	ociRuntime string // optional OCI runtime override (e.g., "runsc")
+}
+
+// New creates a new Docker runtime with default settings.
 func New() (*Runtime, error) {
+	return NewWithOptions()
+}
+
+// NewWithOptions creates a new Docker runtime with the given functional options.
+func NewWithOptions(opts ...Option) (*Runtime, error) {
 	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 	if err != nil {
 		return nil, fmt.Errorf("create docker client: %w", err)
 	}
-	return &Runtime{client: cli}, nil
+	r := &Runtime{client: cli}
+	for _, opt := range opts {
+		opt(r)
+	}
+	return r, nil
 }
 
 func (r *Runtime) Name() string { return "docker" }
@@ -86,6 +107,11 @@ func (r *Runtime) Create(ctx context.Context, cfg runtime.CreateConfig) (string,
 		PortBindings: portBindings,
 	}
 
+	// OCI runtime override (e.g., "runsc" for gVisor).
+	if r.ociRuntime != "" {
+		hostCfg.Runtime = r.ociRuntime
+	}
+
 	// Resource limits.
 	if cfg.Memory != "" {
 		mem, err := parseMemory(cfg.Memory)
@@ -105,7 +131,29 @@ func (r *Runtime) Create(ctx context.Context, cfg runtime.CreateConfig) (string,
 		hostCfg.Binds = append(hostCfg.Binds, formatBind(m))
 	}
 
-	resp, err := r.client.ContainerCreate(ctx, containerCfg, hostCfg, &network.NetworkingConfig{}, nil, cfg.Name)
+	// Network mode.
+	networkingCfg := &network.NetworkingConfig{}
+	switch cfg.Network.Mode {
+	case "none":
+		hostCfg.NetworkMode = container.NetworkMode("none")
+	case "host":
+		hostCfg.NetworkMode = container.NetworkMode("host")
+	case "", "bridge":
+		// Default Docker bridge — no special config needed.
+	default:
+		// Custom network name (e.g. an isolated matrix network).
+		hostCfg.NetworkMode = container.NetworkMode(cfg.Network.Mode)
+		networkingCfg.EndpointsConfig = map[string]*network.EndpointSettings{
+			cfg.Network.Mode: {},
+		}
+	}
+
+	// Custom DNS servers.
+	if len(cfg.Network.DNS) > 0 {
+		hostCfg.DNS = cfg.Network.DNS
+	}
+
+	resp, err := r.client.ContainerCreate(ctx, containerCfg, hostCfg, networkingCfg, nil, cfg.Name)
 	if err != nil {
 		return "", fmt.Errorf("create container: %w", err)
 	}
@@ -353,6 +401,27 @@ func (r *Runtime) DeleteSnapshot(ctx context.Context, snapshotID string) error {
 	})
 	if err != nil {
 		return fmt.Errorf("remove snapshot image: %w", err)
+	}
+	return nil
+}
+
+func (r *Runtime) CreateNetwork(ctx context.Context, name string, internal bool) error {
+	_, err := r.client.NetworkCreate(ctx, name, network.CreateOptions{
+		Driver:   "bridge",
+		Internal: internal,
+		Labels: map[string]string{
+			labelManaged: "true",
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("create network %s: %w", name, err)
+	}
+	return nil
+}
+
+func (r *Runtime) DeleteNetwork(ctx context.Context, name string) error {
+	if err := r.client.NetworkRemove(ctx, name); err != nil {
+		return fmt.Errorf("delete network %s: %w", name, err)
 	}
 	return nil
 }

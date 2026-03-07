@@ -70,6 +70,14 @@ func (m *mockRuntime) DeleteSnapshot(_ context.Context, _ string) error {
 	return nil
 }
 
+func (m *mockRuntime) CreateNetwork(_ context.Context, _ string, _ bool) error {
+	return nil
+}
+
+func (m *mockRuntime) DeleteNetwork(_ context.Context, _ string) error {
+	return nil
+}
+
 // ---------- tests ----------
 
 func TestReconcile_ImportsOrphanedContainers(t *testing.T) {

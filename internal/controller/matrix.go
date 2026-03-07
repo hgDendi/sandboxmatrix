@@ -8,9 +8,16 @@ import (
 	v1alpha1 "github.com/hg-dendi/sandboxmatrix/pkg/api/v1alpha1"
 )
 
+// matrixNetworkName returns the conventional network name for a matrix.
+func matrixNetworkName(matrixName string) string {
+	return "smx-matrix-" + matrixName
+}
+
 // CreateMatrix creates a new matrix with the given members. Each member's
 // sandbox is created via the existing Create method, and the group is tracked
-// as a coordinated unit.
+// as a coordinated unit. An isolated Docker network is created so that all
+// member sandboxes can communicate with each other while being isolated from
+// external traffic.
 func (c *Controller) CreateMatrix(ctx context.Context, name string, members []v1alpha1.MatrixMember) (*v1alpha1.Matrix, error) {
 	if c.matrices == nil {
 		return nil, fmt.Errorf("matrix store not configured")
@@ -19,6 +26,12 @@ func (c *Controller) CreateMatrix(ctx context.Context, name string, members []v1
 	// Check for duplicate matrix name.
 	if _, err := c.matrices.Get(name); err == nil {
 		return nil, fmt.Errorf("matrix %q already exists", name)
+	}
+
+	// Create an isolated network for this matrix.
+	netName := matrixNetworkName(name)
+	if err := c.runtime.CreateNetwork(ctx, netName, true); err != nil {
+		return nil, fmt.Errorf("create matrix network: %w", err)
 	}
 
 	now := time.Now()
@@ -33,12 +46,13 @@ func (c *Controller) CreateMatrix(ctx context.Context, name string, members []v1
 		State:   v1alpha1.MatrixStateActive,
 	}
 
-	// Create each member sandbox.
+	// Create each member sandbox on the isolated network.
 	for _, member := range members {
 		sandboxName := name + "-" + member.Name
 		_, err := c.Create(ctx, CreateOptions{
 			Name:          sandboxName,
 			BlueprintPath: member.Blueprint,
+			NetworkName:   netName,
 		})
 		if err != nil {
 			// Best-effort cleanup: destroy already-created sandboxes.
@@ -49,6 +63,8 @@ func (c *Controller) CreateMatrix(ctx context.Context, name string, members []v1
 				}
 				_ = c.Destroy(ctx, prevName)
 			}
+			// Best-effort: remove the network.
+			_ = c.runtime.DeleteNetwork(ctx, netName)
 			return nil, fmt.Errorf("create member sandbox %q: %w", sandboxName, err)
 		}
 	}
@@ -126,7 +142,8 @@ func (c *Controller) StartMatrix(ctx context.Context, name string) error {
 	return c.matrices.Save(mx)
 }
 
-// DestroyMatrix destroys all member sandboxes and removes the matrix record.
+// DestroyMatrix destroys all member sandboxes, removes the isolated network,
+// and deletes the matrix record.
 func (c *Controller) DestroyMatrix(ctx context.Context, name string) error {
 	if c.matrices == nil {
 		return fmt.Errorf("matrix store not configured")
@@ -149,6 +166,10 @@ func (c *Controller) DestroyMatrix(ctx context.Context, name string) error {
 	if firstErr != nil {
 		return firstErr
 	}
+
+	// Best-effort: remove the isolated matrix network.
+	netName := matrixNetworkName(name)
+	_ = c.runtime.DeleteNetwork(ctx, netName)
 
 	return c.matrices.Delete(name)
 }
