@@ -40,7 +40,11 @@ func newLazySessionCmd() *cobra.Command {
 		if err != nil {
 			return fmt.Errorf("initialize session store: %w", err)
 		}
-		ctrl = controller.New(rt, store, sessions)
+		matrices, err := state.NewFileMatrixStore()
+		if err != nil {
+			return fmt.Errorf("initialize matrix store: %w", err)
+		}
+		ctrl = controller.New(rt, store, sessions, matrices)
 		if err := ctrl.Reconcile(context.Background()); err != nil {
 			fmt.Fprintf(os.Stderr, "warning: state reconciliation failed: %v\n", err)
 		}

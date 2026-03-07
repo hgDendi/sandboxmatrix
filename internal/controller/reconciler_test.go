@@ -91,7 +91,7 @@ func TestReconcile_ImportsOrphanedContainers(t *testing.T) {
 	}
 	store := state.NewMemoryStore()
 
-	ctrl := New(rt, store, nil)
+	ctrl := New(rt, store, nil, nil)
 	if err := ctrl.Reconcile(context.Background()); err != nil {
 		t.Fatalf("Reconcile returned error: %v", err)
 	}
@@ -147,7 +147,7 @@ func TestReconcile_SkipsAlreadyKnownSandboxes(t *testing.T) {
 		t.Fatalf("store.Save: %v", err)
 	}
 
-	ctrl := New(rt, store, nil)
+	ctrl := New(rt, store, nil, nil)
 	if err := ctrl.Reconcile(context.Background()); err != nil {
 		t.Fatalf("Reconcile returned error: %v", err)
 	}
@@ -180,7 +180,7 @@ func TestReconcile_MapsExitedToStopped(t *testing.T) {
 	}
 	store := state.NewMemoryStore()
 
-	ctrl := New(rt, store, nil)
+	ctrl := New(rt, store, nil, nil)
 	if err := ctrl.Reconcile(context.Background()); err != nil {
 		t.Fatalf("Reconcile returned error: %v", err)
 	}
@@ -209,7 +209,7 @@ func TestReconcile_MapsCreatedToPending(t *testing.T) {
 	}
 	store := state.NewMemoryStore()
 
-	ctrl := New(rt, store, nil)
+	ctrl := New(rt, store, nil, nil)
 	if err := ctrl.Reconcile(context.Background()); err != nil {
 		t.Fatalf("Reconcile returned error: %v", err)
 	}
@@ -238,7 +238,7 @@ func TestReconcile_MapsUnknownStateToError(t *testing.T) {
 	}
 	store := state.NewMemoryStore()
 
-	ctrl := New(rt, store, nil)
+	ctrl := New(rt, store, nil, nil)
 	if err := ctrl.Reconcile(context.Background()); err != nil {
 		t.Fatalf("Reconcile returned error: %v", err)
 	}
@@ -266,7 +266,7 @@ func TestReconcile_SkipsContainersWithoutSandboxLabel(t *testing.T) {
 	}
 	store := state.NewMemoryStore()
 
-	ctrl := New(rt, store, nil)
+	ctrl := New(rt, store, nil, nil)
 	if err := ctrl.Reconcile(context.Background()); err != nil {
 		t.Fatalf("Reconcile returned error: %v", err)
 	}
@@ -283,7 +283,7 @@ func TestReconcile_RuntimeListError(t *testing.T) {
 	}
 	store := state.NewMemoryStore()
 
-	ctrl := New(rt, store, nil)
+	ctrl := New(rt, store, nil, nil)
 	err := ctrl.Reconcile(context.Background())
 	if err == nil {
 		t.Fatal("expected error when runtime.List fails, got nil")
@@ -319,7 +319,7 @@ func TestReconcile_MultipleContainers(t *testing.T) {
 	}
 	store := state.NewMemoryStore()
 
-	ctrl := New(rt, store, nil)
+	ctrl := New(rt, store, nil, nil)
 	if err := ctrl.Reconcile(context.Background()); err != nil {
 		t.Fatalf("Reconcile returned error: %v", err)
 	}
@@ -343,7 +343,7 @@ func TestReconcile_EmptyRuntimeNoop(t *testing.T) {
 	rt := &mockRuntime{containers: nil}
 	store := state.NewMemoryStore()
 
-	ctrl := New(rt, store, nil)
+	ctrl := New(rt, store, nil, nil)
 	if err := ctrl.Reconcile(context.Background()); err != nil {
 		t.Fatalf("Reconcile returned error: %v", err)
 	}

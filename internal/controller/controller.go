@@ -17,12 +17,13 @@ type Controller struct {
 	runtime  runtime.Runtime
 	store    state.Store
 	sessions state.SessionStore
+	matrices state.MatrixStore
 }
 
-// New creates a new Controller. The sessions parameter is optional; if nil,
-// session-related methods will return an error.
-func New(rt runtime.Runtime, store state.Store, sessions state.SessionStore) *Controller {
-	return &Controller{runtime: rt, store: store, sessions: sessions}
+// New creates a new Controller. The sessions and matrices parameters are
+// optional; if nil, the corresponding methods will return an error.
+func New(rt runtime.Runtime, store state.Store, sessions state.SessionStore, matrices state.MatrixStore) *Controller {
+	return &Controller{runtime: rt, store: store, sessions: sessions, matrices: matrices}
 }
 
 // CreateOptions holds options for creating a sandbox.
@@ -341,6 +342,18 @@ func (c *Controller) ListSnapshots(ctx context.Context, name string) ([]runtime.
 // DeleteSnapshot removes a snapshot.
 func (c *Controller) DeleteSnapshot(ctx context.Context, snapshotID string) error {
 	return c.runtime.DeleteSnapshot(ctx, snapshotID)
+}
+
+// Stats returns resource usage statistics for a running sandbox.
+func (c *Controller) Stats(ctx context.Context, name string) (runtime.Stats, error) {
+	sb, err := c.store.Get(name)
+	if err != nil {
+		return runtime.Stats{}, err
+	}
+	if sb.Status.State != v1alpha1.SandboxStateRunning {
+		return runtime.Stats{}, fmt.Errorf("sandbox %q is not running", name)
+	}
+	return c.runtime.Stats(ctx, sb.Status.RuntimeID)
 }
 
 // Get returns a sandbox by name.

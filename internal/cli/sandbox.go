@@ -200,6 +200,29 @@ func newSandboxInspectCmdLazy(ctrl **controller.Controller) *cobra.Command {
 	}
 }
 
+func newSandboxStatsCmdLazy(ctrl **controller.Controller) *cobra.Command {
+	return &cobra.Command{
+		Use:   "stats <name>",
+		Short: "Show resource usage statistics for a running sandbox",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			stats, err := (*ctrl).Stats(context.Background(), args[0])
+			if err != nil {
+				return err
+			}
+			memUsageMiB := float64(stats.MemoryUsage) / (1024 * 1024)
+			memLimitMiB := float64(stats.MemoryLimit) / (1024 * 1024)
+			var memPercent float64
+			if stats.MemoryLimit > 0 {
+				memPercent = float64(stats.MemoryUsage) / float64(stats.MemoryLimit) * 100.0
+			}
+			fmt.Printf("CPU:     %.1f%%\n", stats.CPUUsage)
+			fmt.Printf("Memory:  %.1f MiB / %.1f MiB (%.1f%%)\n", memUsageMiB, memLimitMiB, memPercent)
+			return nil
+		},
+	}
+}
+
 func newSandboxSnapshotCmdLazy(ctrl **controller.Controller) *cobra.Command {
 	var tag string
 

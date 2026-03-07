@@ -35,8 +35,10 @@ isolated development environments with pluggable runtime backends.`,
 	// Runtime commands require Docker; initialize lazily on use.
 	sandboxCmd := newLazySandboxCmd()
 	sessionCmd := newLazySessionCmd()
+	matrixCmd := newLazyMatrixCmd()
 	cmd.AddCommand(sandboxCmd)
 	cmd.AddCommand(sessionCmd)
+	cmd.AddCommand(matrixCmd)
 
 	return cmd
 }
@@ -68,7 +70,11 @@ func newLazySandboxCmd() *cobra.Command {
 		if err != nil {
 			return fmt.Errorf("initialize session store: %w", err)
 		}
-		ctrl = controller.New(rt, store, sessions)
+		matrices, err := state.NewFileMatrixStore()
+		if err != nil {
+			return fmt.Errorf("initialize matrix store: %w", err)
+		}
+		ctrl = controller.New(rt, store, sessions, matrices)
 		// Reconcile state from Docker containers.
 		if err := ctrl.Reconcile(context.Background()); err != nil {
 			fmt.Fprintf(os.Stderr, "warning: state reconciliation failed: %v\n", err)
@@ -91,6 +97,7 @@ func newLazySandboxCmd() *cobra.Command {
 		newSandboxDestroyCmdLazy(&ctrl),
 		newSandboxExecCmdLazy(&ctrl),
 		newSandboxInspectCmdLazy(&ctrl),
+		newSandboxStatsCmdLazy(&ctrl),
 		newSandboxSnapshotCmdLazy(&ctrl),
 		newSandboxRestoreCmdLazy(&ctrl),
 		newSandboxSnapshotsCmdLazy(&ctrl),

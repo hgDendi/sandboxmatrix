@@ -289,7 +289,7 @@ func newTestController(t *testing.T) (*Controller, *ctrlMockRuntime) {
 	t.Helper()
 	rt := newCtrlMockRuntime()
 	store := state.NewMemoryStore()
-	return New(rt, store, nil), rt
+	return New(rt, store, nil, nil), rt
 }
 
 // createTestSandbox is a convenience that creates a sandbox through the
@@ -406,7 +406,7 @@ func TestCreateRuntimeError(t *testing.T) {
 	rt := newCtrlMockRuntime()
 	rt.createErr = fmt.Errorf("docker daemon unavailable")
 	store := state.NewMemoryStore()
-	ctrl := New(rt, store, nil)
+	ctrl := New(rt, store, nil, nil)
 
 	bp := blueprintPath(t)
 	_, err := ctrl.Create(context.Background(), CreateOptions{
@@ -437,7 +437,7 @@ func TestCreateStartError(t *testing.T) {
 	rt := newCtrlMockRuntime()
 	rt.startErr = fmt.Errorf("out of memory")
 	store := state.NewMemoryStore()
-	ctrl := New(rt, store, nil)
+	ctrl := New(rt, store, nil, nil)
 
 	bp := blueprintPath(t)
 	_, err := ctrl.Create(context.Background(), CreateOptions{
@@ -646,7 +646,7 @@ func TestExecOnNonExistent(t *testing.T) {
 func TestExecRuntimeError(t *testing.T) {
 	rt := newCtrlMockRuntime()
 	store := state.NewMemoryStore()
-	ctrl := New(rt, store, nil)
+	ctrl := New(rt, store, nil, nil)
 
 	createTestSandbox(t, ctrl, "exec-err")
 
@@ -812,7 +812,7 @@ func TestRealBlueprintFile(t *testing.T) {
 
 	rt := newCtrlMockRuntime()
 	store := state.NewMemoryStore()
-	ctrl := New(rt, store, nil)
+	ctrl := New(rt, store, nil, nil)
 
 	sb, createErr := ctrl.Create(context.Background(), CreateOptions{
 		Name:          "real-bp",

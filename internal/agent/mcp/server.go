@@ -115,6 +115,18 @@ func (s *Server) registerTools() {
 		),
 		s.handleSandboxDestroy,
 	)
+
+	// sandbox_stats
+	s.mcpServer.AddTool(
+		mcp.NewTool("sandbox_stats",
+			mcp.WithDescription("Get resource usage statistics for a running sandbox"),
+			mcp.WithString("name",
+				mcp.Required(),
+				mcp.Description("Name of the sandbox to get stats for"),
+			),
+		),
+		s.handleSandboxStats,
+	)
 }
 
 // ServeStdio starts the MCP server on stdio (stdin/stdout). It blocks until
@@ -265,4 +277,28 @@ func (s *Server) handleSandboxDestroy(ctx context.Context, request mcp.CallToolR
 		return mcp.NewToolResultError(fmt.Sprintf("failed to destroy sandbox: %v", err)), nil
 	}
 	return mcp.NewToolResultText(fmt.Sprintf("Sandbox %q destroyed.", name)), nil
+}
+
+func (s *Server) handleSandboxStats(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	args := request.GetArguments()
+
+	name, _ := args["name"].(string)
+	if name == "" {
+		return mcp.NewToolResultError("parameter 'name' is required"), nil
+	}
+
+	stats, err := s.ctrl.Stats(ctx, name)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("failed to get sandbox stats: %v", err)), nil
+	}
+
+	memUsageMiB := float64(stats.MemoryUsage) / (1024 * 1024)
+	memLimitMiB := float64(stats.MemoryLimit) / (1024 * 1024)
+	var memPercent float64
+	if stats.MemoryLimit > 0 {
+		memPercent = float64(stats.MemoryUsage) / float64(stats.MemoryLimit) * 100.0
+	}
+
+	text := fmt.Sprintf("CPU:     %.1f%%\nMemory:  %.1f MiB / %.1f MiB (%.1f%%)", stats.CPUUsage, memUsageMiB, memLimitMiB, memPercent)
+	return mcp.NewToolResultText(text), nil
 }

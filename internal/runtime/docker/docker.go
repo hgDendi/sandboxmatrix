@@ -3,6 +3,7 @@ package docker
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"strconv"
@@ -200,9 +201,36 @@ func (r *Runtime) Info(ctx context.Context, id string) (runtime.Info, error) {
 	return info, nil
 }
 
-func (r *Runtime) Stats(_ context.Context, _ string) (runtime.Stats, error) {
-	// TODO: implement container stats streaming
-	return runtime.Stats{}, nil
+func (r *Runtime) Stats(ctx context.Context, id string) (runtime.Stats, error) {
+	resp, err := r.client.ContainerStats(ctx, id, false)
+	if err != nil {
+		return runtime.Stats{}, fmt.Errorf("container stats: %w", err)
+	}
+	defer resp.Body.Close()
+
+	var statsResp container.StatsResponse
+	if err := json.NewDecoder(resp.Body).Decode(&statsResp); err != nil {
+		return runtime.Stats{}, fmt.Errorf("decode stats: %w", err)
+	}
+
+	// Calculate CPU percentage.
+	cpuDelta := float64(statsResp.CPUStats.CPUUsage.TotalUsage - statsResp.PreCPUStats.CPUUsage.TotalUsage)
+	systemDelta := float64(statsResp.CPUStats.SystemUsage - statsResp.PreCPUStats.SystemUsage)
+	numCPUs := float64(statsResp.CPUStats.OnlineCPUs)
+	if numCPUs == 0 {
+		numCPUs = 1.0
+	}
+
+	var cpuPercent float64
+	if systemDelta > 0 && cpuDelta >= 0 {
+		cpuPercent = (cpuDelta / systemDelta) * numCPUs * 100.0
+	}
+
+	return runtime.Stats{
+		CPUUsage:    cpuPercent,
+		MemoryUsage: statsResp.MemoryStats.Usage,
+		MemoryLimit: statsResp.MemoryStats.Limit,
+	}, nil
 }
 
 func (r *Runtime) List(ctx context.Context) ([]runtime.Info, error) {

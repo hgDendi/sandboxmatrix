@@ -1,0 +1,9 @@
+apiVersion: smx/v1alpha1
+kind: Matrix
+metadata:
+  name: fullstack
+members:
+  - name: frontend
+    blueprint: blueprints/node-dev.yaml
+  - name: backend
+    blueprint: blueprints/python-dev.yaml

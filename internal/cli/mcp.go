@@ -52,8 +52,14 @@ sandboxes using the standard MCP tool-calling interface.`,
 				return fmt.Errorf("initialize session store: %w", err)
 			}
 
+			// Initialize matrix store.
+			matrices, err := state.NewFileMatrixStore()
+			if err != nil {
+				return fmt.Errorf("initialize matrix store: %w", err)
+			}
+
 			// Create the controller.
-			ctrl := controller.New(rt, store, sessions)
+			ctrl := controller.New(rt, store, sessions, matrices)
 
 			// Reconcile state from Docker containers.
 			if err := ctrl.Reconcile(context.Background()); err != nil {

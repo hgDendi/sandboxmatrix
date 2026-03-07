@@ -124,9 +124,25 @@ type Session struct {
 	ExecCount int          `json:"execCount" yaml:"execCount"`
 }
 
+// MatrixState represents the lifecycle state of a matrix.
+type MatrixState string
+
+const (
+	MatrixStateActive    MatrixState = "Active"
+	MatrixStateStopped   MatrixState = "Stopped"
+	MatrixStateDestroyed MatrixState = "Destroyed"
+)
+
+// MatrixMember defines a sandbox within a matrix.
+type MatrixMember struct {
+	Name      string `json:"name" yaml:"name"`
+	Blueprint string `json:"blueprint" yaml:"blueprint"`
+}
+
 // Matrix represents a group of coordinated sandboxes.
 type Matrix struct {
 	TypeMeta `json:",inline" yaml:",inline"`
-	Metadata ObjectMeta `json:"metadata" yaml:"metadata"`
-	Members  []string   `json:"members" yaml:"members"`
+	Metadata ObjectMeta     `json:"metadata" yaml:"metadata"`
+	Members  []MatrixMember `json:"members" yaml:"members"`
+	State    MatrixState    `json:"state" yaml:"state"`
 }
