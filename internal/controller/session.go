@@ -99,7 +99,7 @@ func (c *Controller) ListSessions(sandboxName string) ([]*v1alpha1.Session, erro
 }
 
 // ExecInSession executes a command and tracks it in the session.
-func (c *Controller) ExecInSession(ctx context.Context, sessionID string, cfg runtime.ExecConfig) (runtime.ExecResult, error) {
+func (c *Controller) ExecInSession(ctx context.Context, sessionID string, cfg *runtime.ExecConfig) (runtime.ExecResult, error) {
 	if c.sessions == nil {
 		return runtime.ExecResult{ExitCode: -1}, errSessionsNotConfigured
 	}

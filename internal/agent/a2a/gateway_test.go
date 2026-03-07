@@ -11,7 +11,7 @@ func TestSendAndReceive(t *testing.T) {
 	gw := New()
 	ctx := context.Background()
 
-	msg := Message{
+	msg := &Message{
 		From:    "sandbox-a",
 		To:      "sandbox-b",
 		Type:    "request",
@@ -53,7 +53,7 @@ func TestReceiveClearsInbox(t *testing.T) {
 	gw := New()
 	ctx := context.Background()
 
-	msg := Message{
+	msg := &Message{
 		From:    "sandbox-a",
 		To:      "sandbox-b",
 		Type:    "event",
@@ -86,7 +86,7 @@ func TestPeekDoesNotClear(t *testing.T) {
 	gw := New()
 	ctx := context.Background()
 
-	msg := Message{
+	msg := &Message{
 		From:    "sandbox-a",
 		To:      "sandbox-b",
 		Type:    "event",
@@ -165,13 +165,13 @@ func TestSubscribeHandler(t *testing.T) {
 	var mu sync.Mutex
 	var received []Message
 
-	gw.Subscribe("sandbox-b", func(msg Message) {
+	gw.Subscribe("sandbox-b", func(msg *Message) {
 		mu.Lock()
 		defer mu.Unlock()
-		received = append(received, msg)
+		received = append(received, *msg)
 	})
 
-	msg := Message{
+	msg := &Message{
 		From:    "sandbox-a",
 		To:      "sandbox-b",
 		Type:    "request",

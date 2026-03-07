@@ -22,7 +22,7 @@ func TestFirecrackerMethodsReturnNotImplemented(t *testing.T) {
 	r := New()
 	ctx := context.Background()
 
-	_, err := r.Create(ctx, runtime.CreateConfig{})
+	_, err := r.Create(ctx, &runtime.CreateConfig{})
 	if !errors.Is(err, ErrNotImplemented) {
 		t.Errorf("Create: expected ErrNotImplemented, got %v", err)
 	}
@@ -39,7 +39,7 @@ func TestFirecrackerMethodsReturnNotImplemented(t *testing.T) {
 		t.Errorf("Destroy: expected ErrNotImplemented, got %v", err)
 	}
 
-	_, err = r.Exec(ctx, "id", runtime.ExecConfig{})
+	_, err = r.Exec(ctx, "id", &runtime.ExecConfig{})
 	if !errors.Is(err, ErrNotImplemented) {
 		t.Errorf("Exec: expected ErrNotImplemented, got %v", err)
 	}
@@ -64,7 +64,7 @@ func TestFirecrackerMethodsReturnNotImplemented(t *testing.T) {
 		t.Errorf("Snapshot: expected ErrNotImplemented, got %v", err)
 	}
 
-	_, err = r.Restore(ctx, "snap-id", runtime.CreateConfig{})
+	_, err = r.Restore(ctx, "snap-id", &runtime.CreateConfig{})
 	if !errors.Is(err, ErrNotImplemented) {
 		t.Errorf("Restore: expected ErrNotImplemented, got %v", err)
 	}

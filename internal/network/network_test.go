@@ -14,7 +14,7 @@ import (
 // Because Manager holds a concrete *client.Client that panics on nil, we
 // cannot unit-test it directly without a live Docker daemon. Instead we
 // extract the same logic into a testable mockManager that mirrors Manager's
-// behaviour, and verify contracts (error wrapping, call order, arguments)
+// behavior, and verify contracts (error wrapping, call order, arguments)
 // through that mock.
 // ---------------------------------------------------------------------------
 
@@ -46,7 +46,7 @@ type connectCall struct {
 	containerID string
 }
 
-func (m *mockNetworkAPI) NetworkCreate(_ context.Context, name string, options network.CreateOptions) (network.CreateResponse, error) {
+func (m *mockNetworkAPI) NetworkCreate(_ context.Context, name string, options network.CreateOptions) (network.CreateResponse, error) { //nolint:gocritic // hugeParam: must match Docker client API signature
 	m.createCalled = true
 	m.createName = name
 	m.createOpts = options

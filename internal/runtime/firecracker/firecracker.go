@@ -29,7 +29,7 @@ func New() *Runtime {
 func (r *Runtime) Name() string { return "firecracker" }
 
 // Create is not implemented.
-func (r *Runtime) Create(_ context.Context, _ runtime.CreateConfig) (string, error) {
+func (r *Runtime) Create(_ context.Context, _ *runtime.CreateConfig) (string, error) {
 	return "", ErrNotImplemented
 }
 
@@ -49,7 +49,7 @@ func (r *Runtime) Destroy(_ context.Context, _ string) error {
 }
 
 // Exec is not implemented.
-func (r *Runtime) Exec(_ context.Context, _ string, _ runtime.ExecConfig) (runtime.ExecResult, error) {
+func (r *Runtime) Exec(_ context.Context, _ string, _ *runtime.ExecConfig) (runtime.ExecResult, error) {
 	return runtime.ExecResult{ExitCode: -1}, ErrNotImplemented
 }
 
@@ -69,12 +69,12 @@ func (r *Runtime) List(_ context.Context) ([]runtime.Info, error) {
 }
 
 // Snapshot is not implemented.
-func (r *Runtime) Snapshot(_ context.Context, _ string, _ string) (string, error) {
+func (r *Runtime) Snapshot(_ context.Context, _, _ string) (string, error) {
 	return "", ErrNotImplemented
 }
 
 // Restore is not implemented.
-func (r *Runtime) Restore(_ context.Context, _ string, _ runtime.CreateConfig) (string, error) {
+func (r *Runtime) Restore(_ context.Context, _ string, _ *runtime.CreateConfig) (string, error) {
 	return "", ErrNotImplemented
 }
 

@@ -135,7 +135,7 @@ func newSessionExecCmdLazy(ctrl **controller.Controller) *cobra.Command {
 			if len(cmdArgs) == 0 {
 				cmdArgs = []string{"/bin/sh"}
 			}
-			result, err := (*ctrl).ExecInSession(context.Background(), sessionID, runtime.ExecConfig{
+			result, err := (*ctrl).ExecInSession(context.Background(), sessionID, &runtime.ExecConfig{
 				Cmd:    cmdArgs,
 				Stdout: os.Stdout,
 				Stderr: os.Stderr,

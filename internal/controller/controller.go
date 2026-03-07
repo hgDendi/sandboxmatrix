@@ -48,13 +48,13 @@ func (c *Controller) Create(ctx context.Context, opts CreateOptions) (*v1alpha1.
 	}
 
 	// Build runtime config from blueprint.
-	cfg := runtime.CreateConfig{
+	cfg := &runtime.CreateConfig{
 		Name:   "smx-" + opts.Name,
 		Image:  bp.Spec.Base,
 		CPU:    bp.Spec.Resources.CPU,
 		Memory: bp.Spec.Resources.Memory,
 		Labels: map[string]string{
-			"sandboxmatrix/sandbox": opts.Name,
+			"sandboxmatrix/sandbox":   opts.Name,
 			"sandboxmatrix/blueprint": bp.Metadata.Name,
 		},
 	}
@@ -231,7 +231,7 @@ func (c *Controller) Destroy(ctx context.Context, name string) error {
 }
 
 // Exec executes a command in a running sandbox.
-func (c *Controller) Exec(ctx context.Context, name string, cfg runtime.ExecConfig) (runtime.ExecResult, error) {
+func (c *Controller) Exec(ctx context.Context, name string, cfg *runtime.ExecConfig) (runtime.ExecResult, error) {
 	sb, err := c.store.Get(name)
 	if err != nil {
 		return runtime.ExecResult{ExitCode: -1}, err
@@ -244,7 +244,7 @@ func (c *Controller) Exec(ctx context.Context, name string, cfg runtime.ExecConf
 }
 
 // Snapshot creates a point-in-time snapshot of a sandbox.
-func (c *Controller) Snapshot(ctx context.Context, name string, tag string) (string, error) {
+func (c *Controller) Snapshot(ctx context.Context, name, tag string) (string, error) {
 	sb, err := c.store.Get(name)
 	if err != nil {
 		return "", err
@@ -262,7 +262,7 @@ func (c *Controller) Snapshot(ctx context.Context, name string, tag string) (str
 }
 
 // Restore creates a new sandbox from a snapshot.
-func (c *Controller) Restore(ctx context.Context, name string, snapshotID string, newName string) (*v1alpha1.Sandbox, error) {
+func (c *Controller) Restore(ctx context.Context, name, snapshotID, newName string) (*v1alpha1.Sandbox, error) {
 	// Check the source sandbox exists.
 	srcSb, err := c.store.Get(name)
 	if err != nil {
@@ -275,7 +275,7 @@ func (c *Controller) Restore(ctx context.Context, name string, snapshotID string
 	}
 
 	// Build runtime config from the source sandbox.
-	cfg := runtime.CreateConfig{
+	cfg := &runtime.CreateConfig{
 		Name:   "smx-" + newName,
 		Image:  snapshotID,
 		CPU:    srcSb.Spec.Resources.CPU,

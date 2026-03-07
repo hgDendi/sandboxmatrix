@@ -82,7 +82,7 @@ func reconcile(ctx context.Context, rt runtime.Runtime, store state.Store) error
 	return nil
 }
 
-// Reconcile synchronises the in-memory state store with containers that are
+// Reconcile synchronizes the in-memory state store with containers that are
 // still present in the runtime. This should be called once during startup so
 // that sandboxes created in a previous CLI session are rediscovered.
 func (c *Controller) Reconcile(ctx context.Context) error {

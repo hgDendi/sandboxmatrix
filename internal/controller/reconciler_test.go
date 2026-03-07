@@ -19,7 +19,7 @@ type mockRuntime struct {
 
 func (m *mockRuntime) Name() string { return "mock" }
 
-func (m *mockRuntime) Create(_ context.Context, _ runtime.CreateConfig) (string, error) {
+func (m *mockRuntime) Create(_ context.Context, _ *runtime.CreateConfig) (string, error) {
 	return "", fmt.Errorf("not implemented")
 }
 
@@ -35,7 +35,7 @@ func (m *mockRuntime) Destroy(_ context.Context, _ string) error {
 	return fmt.Errorf("not implemented")
 }
 
-func (m *mockRuntime) Exec(_ context.Context, _ string, _ runtime.ExecConfig) (runtime.ExecResult, error) {
+func (m *mockRuntime) Exec(_ context.Context, _ string, _ *runtime.ExecConfig) (runtime.ExecResult, error) {
 	return runtime.ExecResult{}, fmt.Errorf("not implemented")
 }
 
@@ -54,11 +54,11 @@ func (m *mockRuntime) List(_ context.Context) ([]runtime.Info, error) {
 	return m.containers, nil
 }
 
-func (m *mockRuntime) Snapshot(_ context.Context, _ string, _ string) (string, error) {
+func (m *mockRuntime) Snapshot(_ context.Context, _, _ string) (string, error) {
 	return "", nil
 }
 
-func (m *mockRuntime) Restore(_ context.Context, _ string, _ runtime.CreateConfig) (string, error) {
+func (m *mockRuntime) Restore(_ context.Context, _ string, _ *runtime.CreateConfig) (string, error) {
 	return "", nil
 }
 

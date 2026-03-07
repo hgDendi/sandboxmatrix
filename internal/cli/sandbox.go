@@ -149,7 +149,7 @@ func newSandboxExecCmdLazy(ctrl **controller.Controller) *cobra.Command {
 				cmdArgs = []string{"/bin/sh"}
 			}
 
-			result, err := (*ctrl).Exec(context.Background(), name, runtime.ExecConfig{
+			result, err := (*ctrl).Exec(context.Background(), name, &runtime.ExecConfig{
 				Cmd:    cmdArgs,
 				Stdout: os.Stdout,
 				Stderr: os.Stderr,

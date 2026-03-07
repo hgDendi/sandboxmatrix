@@ -42,7 +42,7 @@ func newA2ASendCmd() *cobra.Command {
 		Use:   "send",
 		Short: "Send a message from one sandbox to another",
 		RunE: func(_ *cobra.Command, _ []string) error {
-			msg := a2a.Message{
+			msg := &a2a.Message{
 				From:    from,
 				To:      to,
 				Type:    msgType,

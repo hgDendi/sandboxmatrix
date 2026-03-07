@@ -14,15 +14,15 @@ import (
 // Message represents an agent-to-agent message.
 type Message struct {
 	ID        string    `json:"id"`
-	From      string    `json:"from"`      // sender sandbox name
-	To        string    `json:"to"`        // recipient sandbox name
-	Type      string    `json:"type"`      // message type (e.g., "request", "response", "event")
-	Payload   string    `json:"payload"`   // message content (JSON string)
+	From      string    `json:"from"`    // sender sandbox name
+	To        string    `json:"to"`      // recipient sandbox name
+	Type      string    `json:"type"`    // message type (e.g., "request", "response", "event")
+	Payload   string    `json:"payload"` // message content (JSON string)
 	CreatedAt time.Time `json:"createdAt"`
 }
 
 // HandlerFunc is a callback invoked when a message arrives for a subscribed sandbox.
-type HandlerFunc func(msg Message)
+type HandlerFunc func(msg *Message)
 
 // Gateway manages agent-to-agent communication.
 type Gateway struct {
@@ -40,7 +40,7 @@ func New() *Gateway {
 }
 
 // Send sends a message from one sandbox to another.
-func (g *Gateway) Send(ctx context.Context, msg Message) error {
+func (g *Gateway) Send(ctx context.Context, msg *Message) error {
 	if msg.From == "" {
 		return fmt.Errorf("message 'from' field is required")
 	}
@@ -60,7 +60,7 @@ func (g *Gateway) Send(ctx context.Context, msg Message) error {
 	}
 
 	g.mu.Lock()
-	g.inboxes[msg.To] = append(g.inboxes[msg.To], msg)
+	g.inboxes[msg.To] = append(g.inboxes[msg.To], *msg)
 	// Copy handlers under lock to invoke outside.
 	handlers := make([]HandlerFunc, len(g.handlers[msg.To]))
 	copy(handlers, g.handlers[msg.To])
@@ -116,7 +116,7 @@ func (g *Gateway) Subscribe(sandboxName string, handler HandlerFunc) {
 }
 
 // Broadcast sends a message to all sandboxes in the targets list.
-func (g *Gateway) Broadcast(ctx context.Context, from string, targets []string, msgType string, payload string) error {
+func (g *Gateway) Broadcast(ctx context.Context, from string, targets []string, msgType, payload string) error {
 	if from == "" {
 		return fmt.Errorf("'from' field is required")
 	}
@@ -128,7 +128,7 @@ func (g *Gateway) Broadcast(ctx context.Context, from string, targets []string, 
 	}
 
 	for _, target := range targets {
-		msg := Message{
+		msg := &Message{
 			From:    from,
 			To:      target,
 			Type:    msgType,

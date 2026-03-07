@@ -63,7 +63,7 @@ func NewWithOptions(opts ...Option) (*Runtime, error) {
 
 func (r *Runtime) Name() string { return "docker" }
 
-func (r *Runtime) Create(ctx context.Context, cfg runtime.CreateConfig) (string, error) {
+func (r *Runtime) Create(ctx context.Context, cfg *runtime.CreateConfig) (string, error) {
 	// Ensure image exists locally; pull if not.
 	if err := r.ensureImage(ctx, cfg.Image); err != nil {
 		return "", err
@@ -172,7 +172,7 @@ func (r *Runtime) Destroy(ctx context.Context, id string) error {
 	return r.client.ContainerRemove(ctx, id, container.RemoveOptions{Force: true})
 }
 
-func (r *Runtime) Exec(ctx context.Context, id string, cfg runtime.ExecConfig) (runtime.ExecResult, error) {
+func (r *Runtime) Exec(ctx context.Context, id string, cfg *runtime.ExecConfig) (runtime.ExecResult, error) {
 	execCfg := container.ExecOptions{
 		Cmd:          cfg.Cmd,
 		AttachStdout: cfg.Stdout != nil,
@@ -294,17 +294,17 @@ func (r *Runtime) List(ctx context.Context) ([]runtime.Info, error) {
 	}
 
 	infos := make([]runtime.Info, 0, len(containers))
-	for _, c := range containers {
+	for i := range containers {
 		name := ""
-		if len(c.Names) > 0 {
-			name = strings.TrimPrefix(c.Names[0], "/")
+		if len(containers[i].Names) > 0 {
+			name = strings.TrimPrefix(containers[i].Names[0], "/")
 		}
 		infos = append(infos, runtime.Info{
-			ID:     c.ID[:12],
+			ID:     containers[i].ID[:12],
 			Name:   name,
-			Image:  c.Image,
-			State:  c.State,
-			Labels: c.Labels,
+			Image:  containers[i].Image,
+			State:  containers[i].State,
+			Labels: containers[i].Labels,
 		})
 	}
 	return infos, nil
@@ -312,7 +312,7 @@ func (r *Runtime) List(ctx context.Context) ([]runtime.Info, error) {
 
 const snapshotPrefix = "smx-snapshot/"
 
-func (r *Runtime) Snapshot(ctx context.Context, id string, tag string) (string, error) {
+func (r *Runtime) Snapshot(ctx context.Context, id, tag string) (string, error) {
 	// Look up container to get the sandbox name from labels.
 	cj, err := r.client.ContainerInspect(ctx, id)
 	if err != nil {
@@ -338,7 +338,7 @@ func (r *Runtime) Snapshot(ctx context.Context, id string, tag string) (string, 
 	return resp.ID, nil
 }
 
-func (r *Runtime) Restore(ctx context.Context, snapshotID string, cfg runtime.CreateConfig) (string, error) {
+func (r *Runtime) Restore(ctx context.Context, snapshotID string, cfg *runtime.CreateConfig) (string, error) {
 	// Use the snapshot image instead of the blueprint image.
 	cfg.Image = snapshotID
 
@@ -370,8 +370,8 @@ func (r *Runtime) ListSnapshots(ctx context.Context, id string) ([]runtime.Snaps
 	}
 
 	var snapshots []runtime.SnapshotInfo
-	for _, img := range images {
-		for _, repoTag := range img.RepoTags {
+	for i := range images {
+		for _, repoTag := range images[i].RepoTags {
 			if !strings.HasPrefix(repoTag, snapshotPrefix) {
 				continue
 			}
@@ -382,11 +382,11 @@ func (r *Runtime) ListSnapshots(ctx context.Context, id string) ([]runtime.Snaps
 				tag = parts[1]
 			}
 			snapshots = append(snapshots, runtime.SnapshotInfo{
-				ID:        img.ID,
+				ID:        images[i].ID,
 				Tag:       tag,
 				SandboxID: id,
-				CreatedAt: time.Unix(img.Created, 0),
-				Size:      img.Size,
+				CreatedAt: time.Unix(images[i].Created, 0),
+				Size:      images[i].Size,
 			})
 		}
 	}
@@ -427,7 +427,7 @@ func (r *Runtime) DeleteNetwork(ctx context.Context, name string) error {
 }
 
 func (r *Runtime) ensureImage(ctx context.Context, ref string) error {
-	_, _, err := r.client.ImageInspectWithRaw(ctx, ref)
+	_, err := r.client.ImageInspect(ctx, ref)
 	if err == nil {
 		return nil // already present
 	}
@@ -442,7 +442,7 @@ func (r *Runtime) ensureImage(ctx context.Context, ref string) error {
 	return nil
 }
 
-func (r *Runtime) buildLabels(cfg runtime.CreateConfig) map[string]string {
+func (r *Runtime) buildLabels(cfg *runtime.CreateConfig) map[string]string {
 	labels := make(map[string]string)
 	for k, v := range cfg.Labels {
 		labels[k] = v

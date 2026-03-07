@@ -199,7 +199,7 @@ func (s *Server) ServeStdio() error {
 
 // --- Tool handlers ---
 
-func (s *Server) handleSandboxCreate(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+func (s *Server) handleSandboxCreate(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) { //nolint:gocritic // hugeParam: external library type with value receivers
 	args := request.GetArguments()
 
 	name, _ := args["name"].(string)
@@ -235,7 +235,7 @@ func (s *Server) handleSandboxCreate(ctx context.Context, request mcp.CallToolRe
 	return mcp.NewToolResultText(string(data)), nil
 }
 
-func (s *Server) handleSandboxList(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+func (s *Server) handleSandboxList(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) { //nolint:gocritic // hugeParam: external library type with value receivers
 	sandboxes, err := s.ctrl.List()
 	if err != nil {
 		return mcp.NewToolResultError(fmt.Sprintf("failed to list sandboxes: %v", err)), nil
@@ -264,7 +264,7 @@ func (s *Server) handleSandboxList(ctx context.Context, request mcp.CallToolRequ
 	return mcp.NewToolResultText(buf.String()), nil
 }
 
-func (s *Server) handleSandboxExec(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+func (s *Server) handleSandboxExec(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) { //nolint:gocritic // hugeParam: external library type with value receivers
 	args := request.GetArguments()
 
 	name, _ := args["name"].(string)
@@ -280,7 +280,7 @@ func (s *Server) handleSandboxExec(ctx context.Context, request mcp.CallToolRequ
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 
-	result, err := s.ctrl.Exec(ctx, name, runtime.ExecConfig{
+	result, err := s.ctrl.Exec(ctx, name, &runtime.ExecConfig{
 		Cmd:    []string{"sh", "-c", command},
 		Stdout: &stdout,
 		Stderr: &stderr,
@@ -299,7 +299,7 @@ func (s *Server) handleSandboxExec(ctx context.Context, request mcp.CallToolRequ
 	return mcp.NewToolResultText(output), nil
 }
 
-func (s *Server) handleSandboxStop(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+func (s *Server) handleSandboxStop(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) { //nolint:gocritic // hugeParam: external library type with value receivers
 	args := request.GetArguments()
 
 	name, _ := args["name"].(string)
@@ -313,7 +313,7 @@ func (s *Server) handleSandboxStop(ctx context.Context, request mcp.CallToolRequ
 	return mcp.NewToolResultText(fmt.Sprintf("Sandbox %q stopped.", name)), nil
 }
 
-func (s *Server) handleSandboxStart(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+func (s *Server) handleSandboxStart(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) { //nolint:gocritic // hugeParam: external library type with value receivers
 	args := request.GetArguments()
 
 	name, _ := args["name"].(string)
@@ -327,7 +327,7 @@ func (s *Server) handleSandboxStart(ctx context.Context, request mcp.CallToolReq
 	return mcp.NewToolResultText(fmt.Sprintf("Sandbox %q started.", name)), nil
 }
 
-func (s *Server) handleSandboxDestroy(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+func (s *Server) handleSandboxDestroy(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) { //nolint:gocritic // hugeParam: external library type with value receivers
 	args := request.GetArguments()
 
 	name, _ := args["name"].(string)
@@ -341,7 +341,7 @@ func (s *Server) handleSandboxDestroy(ctx context.Context, request mcp.CallToolR
 	return mcp.NewToolResultText(fmt.Sprintf("Sandbox %q destroyed.", name)), nil
 }
 
-func (s *Server) handleSandboxStats(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+func (s *Server) handleSandboxStats(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) { //nolint:gocritic // hugeParam: external library type with value receivers
 	args := request.GetArguments()
 
 	name, _ := args["name"].(string)
@@ -367,7 +367,7 @@ func (s *Server) handleSandboxStats(ctx context.Context, request mcp.CallToolReq
 
 // --- A2A tool handlers ---
 
-func (s *Server) handleA2ASend(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+func (s *Server) handleA2ASend(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) { //nolint:gocritic // hugeParam: external library type with value receivers
 	args := request.GetArguments()
 
 	from, _ := args["from"].(string)
@@ -384,7 +384,7 @@ func (s *Server) handleA2ASend(ctx context.Context, request mcp.CallToolRequest)
 	}
 	payload, _ := args["payload"].(string)
 
-	msg := a2a.Message{
+	msg := &a2a.Message{
 		From:    from,
 		To:      to,
 		Type:    msgType,
@@ -397,7 +397,7 @@ func (s *Server) handleA2ASend(ctx context.Context, request mcp.CallToolRequest)
 	return mcp.NewToolResultText(fmt.Sprintf("Message sent from %q to %q (type: %s).", from, to, msgType)), nil
 }
 
-func (s *Server) handleA2AReceive(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+func (s *Server) handleA2AReceive(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) { //nolint:gocritic // hugeParam: external library type with value receivers
 	args := request.GetArguments()
 
 	sandboxName, _ := args["sandbox_name"].(string)
@@ -421,7 +421,7 @@ func (s *Server) handleA2AReceive(ctx context.Context, request mcp.CallToolReque
 	return mcp.NewToolResultText(string(data)), nil
 }
 
-func (s *Server) handleA2ABroadcast(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+func (s *Server) handleA2ABroadcast(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) { //nolint:gocritic // hugeParam: external library type with value receivers
 	args := request.GetArguments()
 
 	from, _ := args["from"].(string)

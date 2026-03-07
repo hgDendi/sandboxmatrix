@@ -41,7 +41,7 @@ func NewBoltStore() (*BoltStore, error) {
 }
 
 // NewBoltStoreWithPath creates a BoltStore that persists to the given path.
-// It creates the parent directory if it does not exist and initialises the
+// It creates the parent directory if it does not exist and initializes the
 // required buckets.
 func NewBoltStoreWithPath(path string) (*BoltStore, error) {
 	dir := filepath.Dir(path)

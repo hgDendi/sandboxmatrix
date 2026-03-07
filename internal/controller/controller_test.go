@@ -32,7 +32,7 @@ type ctrlMockRuntime struct {
 	networks   map[string]bool // name -> internal flag
 	nextID     int
 
-	// Optional hooks – when non-nil they override default behaviour so tests
+	// Optional hooks – when non-nil they override default behavior so tests
 	// can inject errors at specific points.
 	createErr  error
 	startErr   error
@@ -50,7 +50,7 @@ func newCtrlMockRuntime() *ctrlMockRuntime {
 
 func (m *ctrlMockRuntime) Name() string { return "mock" }
 
-func (m *ctrlMockRuntime) Create(_ context.Context, cfg runtime.CreateConfig) (string, error) {
+func (m *ctrlMockRuntime) Create(_ context.Context, cfg *runtime.CreateConfig) (string, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.createErr != nil {
@@ -58,7 +58,7 @@ func (m *ctrlMockRuntime) Create(_ context.Context, cfg runtime.CreateConfig) (s
 	}
 	m.nextID++
 	id := fmt.Sprintf("mock-%d", m.nextID)
-	m.containers[id] = &ctrlMockContainer{id: id, cfg: cfg, running: false}
+	m.containers[id] = &ctrlMockContainer{id: id, cfg: *cfg, running: false}
 	return id, nil
 }
 
@@ -103,7 +103,7 @@ func (m *ctrlMockRuntime) Destroy(_ context.Context, id string) error {
 	return nil
 }
 
-func (m *ctrlMockRuntime) Exec(_ context.Context, id string, _ runtime.ExecConfig) (runtime.ExecResult, error) {
+func (m *ctrlMockRuntime) Exec(_ context.Context, id string, _ *runtime.ExecConfig) (runtime.ExecResult, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.execErr != nil {
@@ -175,7 +175,7 @@ func (m *ctrlMockRuntime) List(_ context.Context) ([]runtime.Info, error) {
 	return infos, nil
 }
 
-func (m *ctrlMockRuntime) Snapshot(_ context.Context, id string, tag string) (string, error) {
+func (m *ctrlMockRuntime) Snapshot(_ context.Context, id, tag string) (string, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if _, ok := m.containers[id]; !ok {
@@ -184,7 +184,7 @@ func (m *ctrlMockRuntime) Snapshot(_ context.Context, id string, tag string) (st
 	return fmt.Sprintf("sha256:snap-%s-%s", id, tag), nil
 }
 
-func (m *ctrlMockRuntime) Restore(_ context.Context, snapshotID string, cfg runtime.CreateConfig) (string, error) {
+func (m *ctrlMockRuntime) Restore(_ context.Context, snapshotID string, cfg *runtime.CreateConfig) (string, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.createErr != nil {
@@ -193,7 +193,7 @@ func (m *ctrlMockRuntime) Restore(_ context.Context, snapshotID string, cfg runt
 	m.nextID++
 	id := fmt.Sprintf("mock-%d", m.nextID)
 	cfg.Image = snapshotID
-	m.containers[id] = &ctrlMockContainer{id: id, cfg: cfg, running: false}
+	m.containers[id] = &ctrlMockContainer{id: id, cfg: *cfg, running: false}
 	return id, nil
 }
 
@@ -291,8 +291,8 @@ func blueprintPath(t *testing.T) string {
 	}
 	// The test runs from internal/controller, so walk up twice to reach the repo root.
 	candidates := []string{
-		filepath.Join(wd, "../../blueprints/python-dev.yaml"),
-		filepath.Join(wd, "blueprints/python-dev.yaml"),
+		filepath.Join(wd, "..", "..", "blueprints", "python-dev.yaml"),
+		filepath.Join(wd, "blueprints", "python-dev.yaml"),
 	}
 	for _, c := range candidates {
 		abs, _ := filepath.Abs(c)
@@ -620,7 +620,7 @@ func TestExecOnRunning(t *testing.T) {
 	ctrl, _ := newTestController(t)
 	createTestSandbox(t, ctrl, "exec-box")
 
-	result, err := ctrl.Exec(context.Background(), "exec-box", runtime.ExecConfig{
+	result, err := ctrl.Exec(context.Background(), "exec-box", &runtime.ExecConfig{
 		Cmd: []string{"python", "-c", "print('hello')"},
 	})
 	if err != nil {
@@ -639,7 +639,7 @@ func TestExecOnStoppedSandbox(t *testing.T) {
 		t.Fatalf("Stop: %v", err)
 	}
 
-	_, err := ctrl.Exec(context.Background(), "exec-stopped", runtime.ExecConfig{
+	_, err := ctrl.Exec(context.Background(), "exec-stopped", &runtime.ExecConfig{
 		Cmd: []string{"echo", "test"},
 	})
 	if err == nil {
@@ -652,7 +652,7 @@ func TestExecOnStoppedSandbox(t *testing.T) {
 
 func TestExecOnNonExistent(t *testing.T) {
 	ctrl, _ := newTestController(t)
-	_, err := ctrl.Exec(context.Background(), "ghost", runtime.ExecConfig{
+	_, err := ctrl.Exec(context.Background(), "ghost", &runtime.ExecConfig{
 		Cmd: []string{"echo", "hello"},
 	})
 	if err == nil {
@@ -671,7 +671,7 @@ func TestExecRuntimeError(t *testing.T) {
 	createTestSandbox(t, ctrl, "exec-err")
 
 	rt.execErr = fmt.Errorf("execution timed out")
-	_, err := ctrl.Exec(context.Background(), "exec-err", runtime.ExecConfig{
+	_, err := ctrl.Exec(context.Background(), "exec-err", &runtime.ExecConfig{
 		Cmd: []string{"sleep", "infinity"},
 	})
 	if err == nil {
@@ -824,7 +824,7 @@ func TestRealBlueprintFile(t *testing.T) {
 	if err != nil {
 		t.Skip("cannot determine working directory")
 	}
-	realPath := filepath.Join(wd, "../../blueprints/python-dev.yaml")
+	realPath := filepath.Join(wd, "..", "..", "blueprints", "python-dev.yaml")
 	abs, _ := filepath.Abs(realPath)
 	if _, err := os.Stat(abs); err != nil {
 		t.Skipf("real blueprint file not found at %s, skipping", abs)

@@ -15,17 +15,17 @@ type NetworkConfig struct {
 
 // CreateConfig holds configuration for creating a new sandbox runtime.
 type CreateConfig struct {
-	Name      string
-	Image     string
-	CPU       string
-	Memory    string
-	Disk      string
-	Mounts    []Mount
-	Ports     []PortMapping
-	Env       map[string]string
-	Cmd       []string
-	Labels    map[string]string
-	Network   NetworkConfig
+	Name    string
+	Image   string
+	CPU     string
+	Memory  string
+	Disk    string
+	Mounts  []Mount
+	Ports   []PortMapping
+	Env     map[string]string
+	Cmd     []string
+	Labels  map[string]string
+	Network NetworkConfig
 }
 
 // Mount represents a filesystem mount.
@@ -77,13 +77,13 @@ type SnapshotInfo struct {
 
 // Info holds runtime metadata about a sandbox instance.
 type Info struct {
-	ID      string
-	Name    string
-	Image   string
-	State   string
-	IP      string
-	Ports   []PortMapping
-	Labels  map[string]string
+	ID     string
+	Name   string
+	Image  string
+	State  string
+	IP     string
+	Ports  []PortMapping
+	Labels map[string]string
 }
 
 // Runtime defines the interface that all sandbox isolation backends must implement.
@@ -92,7 +92,7 @@ type Runtime interface {
 	Name() string
 
 	// Create creates a new sandbox instance without starting it.
-	Create(ctx context.Context, cfg CreateConfig) (id string, err error)
+	Create(ctx context.Context, cfg *CreateConfig) (id string, err error)
 
 	// Start starts a previously created sandbox.
 	Start(ctx context.Context, id string) error
@@ -104,7 +104,7 @@ type Runtime interface {
 	Destroy(ctx context.Context, id string) error
 
 	// Exec executes a command inside a running sandbox.
-	Exec(ctx context.Context, id string, cfg ExecConfig) (ExecResult, error)
+	Exec(ctx context.Context, id string, cfg *ExecConfig) (ExecResult, error)
 
 	// Info returns metadata about a sandbox instance.
 	Info(ctx context.Context, id string) (Info, error)
@@ -116,10 +116,10 @@ type Runtime interface {
 	List(ctx context.Context) ([]Info, error)
 
 	// Snapshot creates a point-in-time snapshot of a sandbox, returning a snapshot ID.
-	Snapshot(ctx context.Context, id string, tag string) (snapshotID string, err error)
+	Snapshot(ctx context.Context, id, tag string) (snapshotID string, err error)
 
 	// Restore creates a new sandbox from a snapshot.
-	Restore(ctx context.Context, snapshotID string, cfg CreateConfig) (id string, err error)
+	Restore(ctx context.Context, snapshotID string, cfg *CreateConfig) (id string, err error)
 
 	// ListSnapshots returns all snapshots for a sandbox.
 	ListSnapshots(ctx context.Context, id string) ([]SnapshotInfo, error)
