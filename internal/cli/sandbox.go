@@ -199,3 +199,106 @@ func newSandboxInspectCmdLazy(ctrl **controller.Controller) *cobra.Command {
 		},
 	}
 }
+
+func newSandboxSnapshotCmdLazy(ctrl **controller.Controller) *cobra.Command {
+	var tag string
+
+	cmd := &cobra.Command{
+		Use:   "snapshot <name>",
+		Short: "Create a point-in-time snapshot of a sandbox",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			name := args[0]
+			if tag == "" {
+				tag = time.Now().Format("20060102-150405")
+			}
+			fmt.Printf("Creating snapshot of sandbox %q with tag %q...\n", name, tag)
+			snapshotID, err := (*ctrl).Snapshot(context.Background(), name, tag)
+			if err != nil {
+				return err
+			}
+			id := snapshotID
+			if len(id) > 12 {
+				id = id[:12]
+			}
+			fmt.Printf("Snapshot created: %s\n", id)
+			return nil
+		},
+	}
+
+	cmd.Flags().StringVarP(&tag, "tag", "t", "", "Snapshot tag (default: timestamp)")
+	return cmd
+}
+
+func newSandboxRestoreCmdLazy(ctrl **controller.Controller) *cobra.Command {
+	var (
+		snapshotID string
+		newName    string
+	)
+
+	cmd := &cobra.Command{
+		Use:   "restore <name>",
+		Short: "Create a new sandbox from a snapshot",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			name := args[0]
+			if snapshotID == "" {
+				return fmt.Errorf("--snapshot is required")
+			}
+			if newName == "" {
+				return fmt.Errorf("--name is required")
+			}
+			fmt.Printf("Restoring sandbox %q from snapshot %s as %q...\n", name, snapshotID, newName)
+			sb, err := (*ctrl).Restore(context.Background(), name, snapshotID, newName)
+			if err != nil {
+				return err
+			}
+			runtimeID := sb.Status.RuntimeID
+			if len(runtimeID) > 12 {
+				runtimeID = runtimeID[:12]
+			}
+			fmt.Printf("Sandbox %q is %s (runtime: %s)\n", sb.Metadata.Name, sb.Status.State, runtimeID)
+			return nil
+		},
+	}
+
+	cmd.Flags().StringVarP(&snapshotID, "snapshot", "s", "", "Snapshot ID to restore from")
+	cmd.Flags().StringVarP(&newName, "name", "n", "", "Name for the new sandbox")
+	return cmd
+}
+
+func newSandboxSnapshotsCmdLazy(ctrl **controller.Controller) *cobra.Command {
+	return &cobra.Command{
+		Use:   "snapshots <name>",
+		Short: "List snapshots of a sandbox",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			name := args[0]
+			snapshots, err := (*ctrl).ListSnapshots(context.Background(), name)
+			if err != nil {
+				return err
+			}
+			if len(snapshots) == 0 {
+				fmt.Println("No snapshots found.")
+				return nil
+			}
+
+			w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+			fmt.Fprintln(w, "ID\tTAG\tCREATED\tSIZE")
+			for _, snap := range snapshots {
+				id := snap.ID
+				if len(id) > 12 {
+					id = id[:12]
+				}
+				size := fmt.Sprintf("%.1f MB", float64(snap.Size)/(1024*1024))
+				fmt.Fprintf(w, "%s\t%s\t%s\t%s\n",
+					id,
+					snap.Tag,
+					snap.CreatedAt.Format(time.RFC3339),
+					size,
+				)
+			}
+			return w.Flush()
+		},
+	}
+}

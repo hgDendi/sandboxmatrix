@@ -21,6 +21,16 @@ func (m *mockRuntime) Exec(_ context.Context, _ string, _ ExecConfig) (ExecResul
 func (m *mockRuntime) Info(_ context.Context, _ string) (Info, error)   { return Info{}, nil }
 func (m *mockRuntime) Stats(_ context.Context, _ string) (Stats, error) { return Stats{}, nil }
 func (m *mockRuntime) List(_ context.Context) ([]Info, error)           { return nil, nil }
+func (m *mockRuntime) Snapshot(_ context.Context, _ string, _ string) (string, error) {
+	return "", nil
+}
+func (m *mockRuntime) Restore(_ context.Context, _ string, _ CreateConfig) (string, error) {
+	return "", nil
+}
+func (m *mockRuntime) ListSnapshots(_ context.Context, _ string) ([]SnapshotInfo, error) {
+	return nil, nil
+}
+func (m *mockRuntime) DeleteSnapshot(_ context.Context, _ string) error { return nil }
 
 func TestRegistry(t *testing.T) {
 	reg := NewRegistry()

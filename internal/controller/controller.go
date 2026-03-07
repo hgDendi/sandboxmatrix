@@ -14,13 +14,15 @@ import (
 
 // Controller orchestrates sandbox lifecycle through runtime and state.
 type Controller struct {
-	runtime runtime.Runtime
-	store   state.Store
+	runtime  runtime.Runtime
+	store    state.Store
+	sessions state.SessionStore
 }
 
-// New creates a new Controller.
-func New(rt runtime.Runtime, store state.Store) *Controller {
-	return &Controller{runtime: rt, store: store}
+// New creates a new Controller. The sessions parameter is optional; if nil,
+// session-related methods will return an error.
+func New(rt runtime.Runtime, store state.Store, sessions state.SessionStore) *Controller {
+	return &Controller{runtime: rt, store: store, sessions: sessions}
 }
 
 // CreateOptions holds options for creating a sandbox.
@@ -213,6 +215,132 @@ func (c *Controller) Exec(ctx context.Context, name string, cfg runtime.ExecConf
 	}
 
 	return c.runtime.Exec(ctx, sb.Status.RuntimeID, cfg)
+}
+
+// Snapshot creates a point-in-time snapshot of a sandbox.
+func (c *Controller) Snapshot(ctx context.Context, name string, tag string) (string, error) {
+	sb, err := c.store.Get(name)
+	if err != nil {
+		return "", err
+	}
+	if sb.Status.RuntimeID == "" {
+		return "", fmt.Errorf("sandbox %q has no runtime ID", name)
+	}
+
+	snapshotID, err := c.runtime.Snapshot(ctx, sb.Status.RuntimeID, tag)
+	if err != nil {
+		return "", fmt.Errorf("snapshot runtime: %w", err)
+	}
+
+	return snapshotID, nil
+}
+
+// Restore creates a new sandbox from a snapshot.
+func (c *Controller) Restore(ctx context.Context, name string, snapshotID string, newName string) (*v1alpha1.Sandbox, error) {
+	// Check the source sandbox exists.
+	srcSb, err := c.store.Get(name)
+	if err != nil {
+		return nil, err
+	}
+
+	// Check for duplicate new name.
+	if _, err := c.store.Get(newName); err == nil {
+		return nil, fmt.Errorf("sandbox %q already exists", newName)
+	}
+
+	// Build runtime config from the source sandbox.
+	cfg := runtime.CreateConfig{
+		Name:   "smx-" + newName,
+		Image:  snapshotID,
+		CPU:    srcSb.Spec.Resources.CPU,
+		Memory: srcSb.Spec.Resources.Memory,
+		Labels: map[string]string{
+			"sandboxmatrix/sandbox":   newName,
+			"sandboxmatrix/blueprint": srcSb.Spec.BlueprintRef,
+			"sandboxmatrix/restored":  "true",
+		},
+	}
+
+	// Create sandbox state record.
+	now := time.Now()
+	sb := &v1alpha1.Sandbox{
+		TypeMeta: v1alpha1.TypeMeta{APIVersion: "smx/v1alpha1", Kind: "Sandbox"},
+		Metadata: v1alpha1.ObjectMeta{
+			Name:      newName,
+			CreatedAt: now,
+			UpdatedAt: now,
+			Labels: map[string]string{
+				"blueprint":     srcSb.Spec.BlueprintRef,
+				"restored":      "true",
+				"restored-from": name,
+			},
+		},
+		Spec: v1alpha1.SandboxSpec{
+			BlueprintRef: srcSb.Spec.BlueprintRef,
+			Resources:    srcSb.Spec.Resources,
+			Workspace:    srcSb.Spec.Workspace,
+		},
+		Status: v1alpha1.SandboxStatus{
+			State: v1alpha1.SandboxStateCreating,
+		},
+	}
+
+	if err := c.store.Save(sb); err != nil {
+		return nil, fmt.Errorf("save state: %w", err)
+	}
+
+	// Restore via runtime.
+	runtimeID, err := c.runtime.Restore(ctx, snapshotID, cfg)
+	if err != nil {
+		sb.Status.State = v1alpha1.SandboxStateError
+		sb.Status.Message = err.Error()
+		_ = c.store.Save(sb)
+		return nil, fmt.Errorf("restore runtime: %w", err)
+	}
+
+	// Start the container.
+	if err := c.runtime.Start(ctx, runtimeID); err != nil {
+		sb.Status.State = v1alpha1.SandboxStateError
+		sb.Status.Message = err.Error()
+		_ = c.store.Save(sb)
+		return nil, fmt.Errorf("start runtime: %w", err)
+	}
+
+	startedAt := time.Now()
+	sb.Status.State = v1alpha1.SandboxStateRunning
+	sb.Status.RuntimeID = runtimeID
+	sb.Status.StartedAt = &startedAt
+	sb.Metadata.UpdatedAt = startedAt
+
+	// Get IP address.
+	info, err := c.runtime.Info(ctx, runtimeID)
+	if err == nil {
+		sb.Status.IP = info.IP
+	}
+
+	if err := c.store.Save(sb); err != nil {
+		return nil, fmt.Errorf("save state: %w", err)
+	}
+
+	return sb, nil
+}
+
+// ListSnapshots returns all snapshots for a sandbox.
+func (c *Controller) ListSnapshots(ctx context.Context, name string) ([]runtime.SnapshotInfo, error) {
+	sb, err := c.store.Get(name)
+	if err != nil {
+		return nil, err
+	}
+	if sb.Status.RuntimeID == "" {
+		return nil, fmt.Errorf("sandbox %q has no runtime ID", name)
+	}
+
+	return c.runtime.ListSnapshots(ctx, sb.Status.RuntimeID)
+}
+
+// DeleteSnapshot removes a snapshot.
+func (c *Controller) DeleteSnapshot(ctx context.Context, snapshotID string) error {
+	return c.runtime.DeleteSnapshot(ctx, snapshotID)
 }
 
 // Get returns a sandbox by name.

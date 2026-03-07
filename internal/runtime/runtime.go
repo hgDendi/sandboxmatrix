@@ -4,6 +4,7 @@ package runtime
 import (
 	"context"
 	"io"
+	"time"
 )
 
 // CreateConfig holds configuration for creating a new sandbox runtime.
@@ -58,6 +59,15 @@ type Stats struct {
 	DiskUsage   uint64
 }
 
+// SnapshotInfo holds metadata about a point-in-time snapshot.
+type SnapshotInfo struct {
+	ID        string
+	Tag       string
+	SandboxID string
+	CreatedAt time.Time
+	Size      int64
+}
+
 // Info holds runtime metadata about a sandbox instance.
 type Info struct {
 	ID      string
@@ -97,4 +107,16 @@ type Runtime interface {
 
 	// List returns all sandbox instances managed by this runtime.
 	List(ctx context.Context) ([]Info, error)
+
+	// Snapshot creates a point-in-time snapshot of a sandbox, returning a snapshot ID.
+	Snapshot(ctx context.Context, id string, tag string) (snapshotID string, err error)
+
+	// Restore creates a new sandbox from a snapshot.
+	Restore(ctx context.Context, snapshotID string, cfg CreateConfig) (id string, err error)
+
+	// ListSnapshots returns all snapshots for a sandbox.
+	ListSnapshots(ctx context.Context, id string) ([]SnapshotInfo, error)
+
+	// DeleteSnapshot removes a snapshot.
+	DeleteSnapshot(ctx context.Context, snapshotID string) error
 }

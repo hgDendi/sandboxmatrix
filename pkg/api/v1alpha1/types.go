@@ -115,10 +115,13 @@ const (
 
 // Session represents a bounded AI agent execution context.
 type Session struct {
-	TypeMeta `json:",inline" yaml:",inline"`
-	Metadata ObjectMeta   `json:"metadata" yaml:"metadata"`
-	Sandbox  string       `json:"sandbox" yaml:"sandbox"`
-	State    SessionState `json:"state" yaml:"state"`
+	TypeMeta  `json:",inline" yaml:",inline"`
+	Metadata  ObjectMeta   `json:"metadata" yaml:"metadata"`
+	Sandbox   string       `json:"sandbox" yaml:"sandbox"`
+	State     SessionState `json:"state" yaml:"state"`
+	StartedAt *time.Time   `json:"startedAt,omitempty" yaml:"startedAt,omitempty"`
+	EndedAt   *time.Time   `json:"endedAt,omitempty" yaml:"endedAt,omitempty"`
+	ExecCount int          `json:"execCount" yaml:"execCount"`
 }
 
 // Matrix represents a group of coordinated sandboxes.

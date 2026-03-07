@@ -174,6 +174,36 @@ func (m *ctrlMockRuntime) List(_ context.Context) ([]runtime.Info, error) {
 	return infos, nil
 }
 
+func (m *ctrlMockRuntime) Snapshot(_ context.Context, id string, tag string) (string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if _, ok := m.containers[id]; !ok {
+		return "", fmt.Errorf("container %q not found", id)
+	}
+	return fmt.Sprintf("sha256:snap-%s-%s", id, tag), nil
+}
+
+func (m *ctrlMockRuntime) Restore(_ context.Context, snapshotID string, cfg runtime.CreateConfig) (string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.createErr != nil {
+		return "", m.createErr
+	}
+	m.nextID++
+	id := fmt.Sprintf("mock-%d", m.nextID)
+	cfg.Image = snapshotID
+	m.containers[id] = &ctrlMockContainer{id: id, cfg: cfg, running: false}
+	return id, nil
+}
+
+func (m *ctrlMockRuntime) ListSnapshots(_ context.Context, _ string) ([]runtime.SnapshotInfo, error) {
+	return nil, nil
+}
+
+func (m *ctrlMockRuntime) DeleteSnapshot(_ context.Context, _ string) error {
+	return nil
+}
+
 // containerCount returns the number of containers tracked by the mock.
 func (m *ctrlMockRuntime) containerCount() int {
 	m.mu.Lock()
@@ -259,7 +289,7 @@ func newTestController(t *testing.T) (*Controller, *ctrlMockRuntime) {
 	t.Helper()
 	rt := newCtrlMockRuntime()
 	store := state.NewMemoryStore()
-	return New(rt, store), rt
+	return New(rt, store, nil), rt
 }
 
 // createTestSandbox is a convenience that creates a sandbox through the
@@ -376,7 +406,7 @@ func TestCreateRuntimeError(t *testing.T) {
 	rt := newCtrlMockRuntime()
 	rt.createErr = fmt.Errorf("docker daemon unavailable")
 	store := state.NewMemoryStore()
-	ctrl := New(rt, store)
+	ctrl := New(rt, store, nil)
 
 	bp := blueprintPath(t)
 	_, err := ctrl.Create(context.Background(), CreateOptions{
@@ -407,7 +437,7 @@ func TestCreateStartError(t *testing.T) {
 	rt := newCtrlMockRuntime()
 	rt.startErr = fmt.Errorf("out of memory")
 	store := state.NewMemoryStore()
-	ctrl := New(rt, store)
+	ctrl := New(rt, store, nil)
 
 	bp := blueprintPath(t)
 	_, err := ctrl.Create(context.Background(), CreateOptions{
@@ -616,7 +646,7 @@ func TestExecOnNonExistent(t *testing.T) {
 func TestExecRuntimeError(t *testing.T) {
 	rt := newCtrlMockRuntime()
 	store := state.NewMemoryStore()
-	ctrl := New(rt, store)
+	ctrl := New(rt, store, nil)
 
 	createTestSandbox(t, ctrl, "exec-err")
 
@@ -782,7 +812,7 @@ func TestRealBlueprintFile(t *testing.T) {
 
 	rt := newCtrlMockRuntime()
 	store := state.NewMemoryStore()
-	ctrl := New(rt, store)
+	ctrl := New(rt, store, nil)
 
 	sb, createErr := ctrl.Create(context.Background(), CreateOptions{
 		Name:          "real-bp",

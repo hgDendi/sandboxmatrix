@@ -7,6 +7,7 @@ import (
 	"io"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
@@ -231,6 +232,101 @@ func (r *Runtime) List(ctx context.Context) ([]runtime.Info, error) {
 		})
 	}
 	return infos, nil
+}
+
+const snapshotPrefix = "smx-snapshot/"
+
+func (r *Runtime) Snapshot(ctx context.Context, id string, tag string) (string, error) {
+	// Look up container to get the sandbox name from labels.
+	cj, err := r.client.ContainerInspect(ctx, id)
+	if err != nil {
+		return "", fmt.Errorf("inspect container for snapshot: %w", err)
+	}
+
+	sandboxName := cj.Config.Labels[labelName]
+	if sandboxName == "" {
+		sandboxName = strings.TrimPrefix(cj.Name, "/")
+	}
+
+	ref := snapshotPrefix + sandboxName + ":" + tag
+
+	resp, err := r.client.ContainerCommit(ctx, id, container.CommitOptions{
+		Reference: ref,
+		Comment:   fmt.Sprintf("smx snapshot of %s", sandboxName),
+		Pause:     true,
+	})
+	if err != nil {
+		return "", fmt.Errorf("commit container: %w", err)
+	}
+
+	return resp.ID, nil
+}
+
+func (r *Runtime) Restore(ctx context.Context, snapshotID string, cfg runtime.CreateConfig) (string, error) {
+	// Use the snapshot image instead of the blueprint image.
+	cfg.Image = snapshotID
+
+	return r.Create(ctx, cfg)
+}
+
+func (r *Runtime) ListSnapshots(ctx context.Context, id string) ([]runtime.SnapshotInfo, error) {
+	// Look up container to get the sandbox name.
+	cj, err := r.client.ContainerInspect(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("inspect container for listing snapshots: %w", err)
+	}
+
+	sandboxName := cj.Config.Labels[labelName]
+	if sandboxName == "" {
+		sandboxName = strings.TrimPrefix(cj.Name, "/")
+	}
+
+	refPrefix := snapshotPrefix + sandboxName
+
+	f := filters.NewArgs()
+	f.Add("reference", refPrefix)
+
+	images, err := r.client.ImageList(ctx, image.ListOptions{
+		Filters: f,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list snapshot images: %w", err)
+	}
+
+	var snapshots []runtime.SnapshotInfo
+	for _, img := range images {
+		for _, repoTag := range img.RepoTags {
+			if !strings.HasPrefix(repoTag, snapshotPrefix) {
+				continue
+			}
+			// Parse tag from "smx-snapshot/<name>:<tag>"
+			parts := strings.SplitN(repoTag, ":", 2)
+			tag := ""
+			if len(parts) == 2 {
+				tag = parts[1]
+			}
+			snapshots = append(snapshots, runtime.SnapshotInfo{
+				ID:        img.ID,
+				Tag:       tag,
+				SandboxID: id,
+				CreatedAt: time.Unix(img.Created, 0),
+				Size:      img.Size,
+			})
+		}
+	}
+
+	return snapshots, nil
+}
+
+func (r *Runtime) DeleteSnapshot(ctx context.Context, snapshotID string) error {
+	_, err := r.client.ImageRemove(ctx, snapshotID, image.RemoveOptions{
+		Force:         true,
+		PruneChildren: true,
+	})
+	if err != nil {
+		return fmt.Errorf("remove snapshot image: %w", err)
+	}
+	return nil
 }
 
 func (r *Runtime) ensureImage(ctx context.Context, ref string) error {
