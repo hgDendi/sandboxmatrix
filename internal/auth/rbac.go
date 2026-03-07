@@ -127,7 +127,7 @@ func (r *RBAC) ListUsers() []*v1alpha1.User {
 }
 
 // Authorize checks if a user has permission to perform an action on a resource.
-func (r *RBAC) Authorize(userName string, resource string, action string) error {
+func (r *RBAC) Authorize(userName, resource, action string) error {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -141,7 +141,7 @@ func (r *RBAC) Authorize(userName string, resource string, action string) error 
 
 // AuthorizeByToken looks up a user by their token and checks permissions.
 // Returns the user name on success.
-func (r *RBAC) AuthorizeByToken(token string, resource string, action string) (string, error) {
+func (r *RBAC) AuthorizeByToken(token, resource, action string) (string, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -168,7 +168,7 @@ func (r *RBAC) AuthorizeByToken(token string, resource string, action string) (s
 
 // checkPermission verifies a role has permission for the given resource/action.
 // Must be called with r.mu held (at least RLock).
-func (r *RBAC) checkPermission(role v1alpha1.Role, resource string, action string) error {
+func (r *RBAC) checkPermission(role v1alpha1.Role, resource, action string) error {
 	perms, ok := r.roles[role]
 	if !ok {
 		return fmt.Errorf("unknown role %q", role)

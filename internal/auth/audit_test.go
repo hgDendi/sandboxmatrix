@@ -18,7 +18,7 @@ func TestAuditLogRecord(t *testing.T) {
 	}
 	defer audit.Close()
 
-	audit.Record(v1alpha1.AuditEntry{
+	audit.Record(&v1alpha1.AuditEntry{
 		User:     "alice",
 		Action:   "sandbox.create",
 		Resource: "sandbox/my-sandbox",
@@ -48,9 +48,9 @@ func TestAuditLogQueryByUser(t *testing.T) {
 	}
 	defer audit.Close()
 
-	audit.Record(v1alpha1.AuditEntry{User: "alice", Action: "sandbox.create", Result: "success"})
-	audit.Record(v1alpha1.AuditEntry{User: "bob", Action: "sandbox.read", Result: "success"})
-	audit.Record(v1alpha1.AuditEntry{User: "alice", Action: "matrix.create", Result: "success"})
+	audit.Record(&v1alpha1.AuditEntry{User: "alice", Action: "sandbox.create", Result: "success"})
+	audit.Record(&v1alpha1.AuditEntry{User: "bob", Action: "sandbox.read", Result: "success"})
+	audit.Record(&v1alpha1.AuditEntry{User: "alice", Action: "matrix.create", Result: "success"})
 
 	entries := audit.Query("alice", "", 0)
 	if len(entries) != 2 {
@@ -70,9 +70,9 @@ func TestAuditLogQueryByAction(t *testing.T) {
 	}
 	defer audit.Close()
 
-	audit.Record(v1alpha1.AuditEntry{User: "alice", Action: "sandbox.create", Result: "success"})
-	audit.Record(v1alpha1.AuditEntry{User: "bob", Action: "sandbox.read", Result: "success"})
-	audit.Record(v1alpha1.AuditEntry{User: "alice", Action: "sandbox.create", Result: "denied"})
+	audit.Record(&v1alpha1.AuditEntry{User: "alice", Action: "sandbox.create", Result: "success"})
+	audit.Record(&v1alpha1.AuditEntry{User: "bob", Action: "sandbox.read", Result: "success"})
+	audit.Record(&v1alpha1.AuditEntry{User: "alice", Action: "sandbox.create", Result: "denied"})
 
 	entries := audit.Query("", "sandbox.create", 0)
 	if len(entries) != 2 {
@@ -88,7 +88,7 @@ func TestAuditLogQueryLimit(t *testing.T) {
 	defer audit.Close()
 
 	for i := 0; i < 10; i++ {
-		audit.Record(v1alpha1.AuditEntry{User: "alice", Action: "sandbox.read", Result: "success"})
+		audit.Record(&v1alpha1.AuditEntry{User: "alice", Action: "sandbox.read", Result: "success"})
 	}
 
 	entries := audit.Query("", "", 3)
@@ -108,9 +108,9 @@ func TestAuditLogNewestFirst(t *testing.T) {
 	t2 := time.Date(2025, 1, 2, 0, 0, 0, 0, time.UTC)
 	t3 := time.Date(2025, 1, 3, 0, 0, 0, 0, time.UTC)
 
-	audit.Record(v1alpha1.AuditEntry{Timestamp: t1, User: "alice", Action: "first", Result: "success"})
-	audit.Record(v1alpha1.AuditEntry{Timestamp: t2, User: "alice", Action: "second", Result: "success"})
-	audit.Record(v1alpha1.AuditEntry{Timestamp: t3, User: "alice", Action: "third", Result: "success"})
+	audit.Record(&v1alpha1.AuditEntry{Timestamp: t1, User: "alice", Action: "first", Result: "success"})
+	audit.Record(&v1alpha1.AuditEntry{Timestamp: t2, User: "alice", Action: "second", Result: "success"})
+	audit.Record(&v1alpha1.AuditEntry{Timestamp: t3, User: "alice", Action: "third", Result: "success"})
 
 	entries := audit.Query("", "", 0)
 	if len(entries) != 3 {
@@ -132,7 +132,7 @@ func TestAuditLogMaxSize(t *testing.T) {
 	defer audit.Close()
 
 	for i := 0; i < 10; i++ {
-		audit.Record(v1alpha1.AuditEntry{User: "alice", Action: "sandbox.read", Result: "success"})
+		audit.Record(&v1alpha1.AuditEntry{User: "alice", Action: "sandbox.read", Result: "success"})
 	}
 
 	entries := audit.Query("", "", 0)
@@ -150,8 +150,8 @@ func TestAuditLogFileOutput(t *testing.T) {
 		t.Fatalf("NewAuditLog: %v", err)
 	}
 
-	audit.Record(v1alpha1.AuditEntry{User: "alice", Action: "sandbox.create", Resource: "sandbox/test", Result: "success"})
-	audit.Record(v1alpha1.AuditEntry{User: "bob", Action: "sandbox.read", Resource: "sandbox/test", Result: "success"})
+	audit.Record(&v1alpha1.AuditEntry{User: "alice", Action: "sandbox.create", Resource: "sandbox/test", Result: "success"})
+	audit.Record(&v1alpha1.AuditEntry{User: "bob", Action: "sandbox.read", Resource: "sandbox/test", Result: "success"})
 
 	if err := audit.Close(); err != nil {
 		t.Fatalf("Close: %v", err)
@@ -187,7 +187,7 @@ func TestAuditLogNoFile(t *testing.T) {
 		t.Fatalf("NewAuditLog: %v", err)
 	}
 
-	audit.Record(v1alpha1.AuditEntry{User: "alice", Action: "test", Result: "success"})
+	audit.Record(&v1alpha1.AuditEntry{User: "alice", Action: "test", Result: "success"})
 
 	if err := audit.Close(); err != nil {
 		t.Fatalf("Close: %v", err)
@@ -201,9 +201,9 @@ func TestAuditLogQueryCombinedFilters(t *testing.T) {
 	}
 	defer audit.Close()
 
-	audit.Record(v1alpha1.AuditEntry{User: "alice", Action: "sandbox.create", Result: "success"})
-	audit.Record(v1alpha1.AuditEntry{User: "alice", Action: "sandbox.read", Result: "success"})
-	audit.Record(v1alpha1.AuditEntry{User: "bob", Action: "sandbox.create", Result: "success"})
+	audit.Record(&v1alpha1.AuditEntry{User: "alice", Action: "sandbox.create", Result: "success"})
+	audit.Record(&v1alpha1.AuditEntry{User: "alice", Action: "sandbox.read", Result: "success"})
+	audit.Record(&v1alpha1.AuditEntry{User: "bob", Action: "sandbox.create", Result: "success"})
 
 	// Filter by both user and action.
 	entries := audit.Query("alice", "sandbox.create", 0)

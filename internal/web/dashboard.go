@@ -32,17 +32,17 @@ func NewDashboard(ctrl *controller.Controller, addr string) *Dashboard {
 
 // sandboxJSON is the JSON representation of a sandbox for the dashboard API.
 type sandboxJSON struct {
-	Name        string            `json:"name"`
-	State       string            `json:"state"`
-	Blueprint   string            `json:"blueprint"`
-	RuntimeID   string            `json:"runtimeID"`
-	IP          string            `json:"ip,omitempty"`
-	CreatedAt   time.Time         `json:"createdAt"`
-	StartedAt   *time.Time        `json:"startedAt,omitempty"`
-	StoppedAt   *time.Time        `json:"stoppedAt,omitempty"`
-	Message     string            `json:"message,omitempty"`
-	Labels      map[string]string `json:"labels,omitempty"`
-	Resources   v1alpha1.Resources `json:"resources,omitempty"`
+	Name      string             `json:"name"`
+	State     string             `json:"state"`
+	Blueprint string             `json:"blueprint"`
+	RuntimeID string             `json:"runtimeID"`
+	IP        string             `json:"ip,omitempty"`
+	CreatedAt time.Time          `json:"createdAt"`
+	StartedAt *time.Time         `json:"startedAt,omitempty"`
+	StoppedAt *time.Time         `json:"stoppedAt,omitempty"`
+	Message   string             `json:"message,omitempty"`
+	Labels    map[string]string  `json:"labels,omitempty"`
+	Resources v1alpha1.Resources `json:"resources,omitempty"`
 }
 
 // matrixJSON is the JSON representation of a matrix for the dashboard API.
@@ -86,7 +86,7 @@ func (d *Dashboard) Start() error {
 			return
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.Write(data)
+		_, _ = w.Write(data)
 	})
 
 	// API endpoints.
@@ -247,7 +247,7 @@ func (d *Dashboard) handleDestroySandbox(w http.ResponseWriter, r *http.Request)
 func writeJSON(w http.ResponseWriter, status int, v interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(v)
+	_ = json.NewEncoder(w).Encode(v)
 }
 
 // truncateID shortens a runtime ID to 12 characters for display.

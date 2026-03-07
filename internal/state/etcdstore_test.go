@@ -256,10 +256,10 @@ func TestEtcdStore_Integration_SessionCRUD(t *testing.T) {
 
 	now := time.Now().Truncate(time.Millisecond)
 	sess := &v1alpha1.Session{
-		TypeMeta: v1alpha1.TypeMeta{APIVersion: "v1alpha1", Kind: "Session"},
-		Metadata: v1alpha1.ObjectMeta{Name: "int-sess-1"},
-		Sandbox:  "my-sandbox",
-		State:    v1alpha1.SessionStateActive,
+		TypeMeta:  v1alpha1.TypeMeta{APIVersion: "v1alpha1", Kind: "Session"},
+		Metadata:  v1alpha1.ObjectMeta{Name: "int-sess-1"},
+		Sandbox:   "my-sandbox",
+		State:     v1alpha1.SessionStateActive,
 		StartedAt: &now,
 	}
 

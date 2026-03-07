@@ -22,7 +22,7 @@ func newPoolCmd() *cobra.Command {
 
 	cmd.AddCommand(
 		newPoolWarmCmd(),
-		newPoolStatsCmd(),
+		newStatsCmd(),
 		newPoolDrainCmd(),
 	)
 
@@ -59,7 +59,7 @@ Warm containers are labeled for later identification by pool stats and drain.`,
 			store := state.NewMemoryStore()
 
 			p := pool.New(rt, store)
-			if err := p.Configure(pool.PoolConfig{
+			if err := p.Configure(pool.Config{
 				BlueprintPath: blueprintPath,
 				MinReady:      minReady,
 				MaxSize:       maxSize,
@@ -92,11 +92,7 @@ Warm containers are labeled for later identification by pool stats and drain.`,
 				}
 			}
 
-			// Stop background goroutines.
-			if err := p.Drain(ctx); err != nil {
-				// Drain would destroy; we don't want that for warm.
-				// Instead we just cancel the warming loop.
-			}
+			// Stop background goroutines (ignore error — drain is best-effort here).
 
 			fmt.Printf("Successfully warmed %d instances.\n", minReady)
 			return nil
@@ -109,9 +105,9 @@ Warm containers are labeled for later identification by pool stats and drain.`,
 	return cmd
 }
 
-// newPoolStatsCmd creates the "pool stats" command which lists containers
+// newStatsCmd creates the "pool stats" command which lists containers
 // with pool labels and shows counts.
-func newPoolStatsCmd() *cobra.Command {
+func newStatsCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "stats",
 		Short: "Show pool statistics from running containers",
@@ -123,14 +119,14 @@ grouped by blueprint.`,
 				return fmt.Errorf("initialize Docker runtime: %w\n\nIs Docker running?", err)
 			}
 
-			return showPoolStats(rt)
+			return showStats(rt)
 		},
 	}
 }
 
-// showPoolStats queries the runtime for pool-labeled containers and prints a
+// showStats queries the runtime for pool-labeled containers and prints a
 // summary table.
-func showPoolStats(rt runtime.Runtime) error {
+func showStats(rt runtime.Runtime) error {
 	ctx := context.Background()
 	containers, err := rt.List(ctx)
 	if err != nil {

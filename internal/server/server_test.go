@@ -347,7 +347,7 @@ func TestCORSPreflight(t *testing.T) {
 	ts := setupTestServer(t)
 	defer ts.Close()
 
-	req, _ := http.NewRequest(http.MethodOptions, ts.URL+"/api/v1/sandboxes", nil)
+	req, _ := http.NewRequest(http.MethodOptions, ts.URL+"/api/v1/sandboxes", http.NoBody)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("OPTIONS /api/v1/sandboxes: %v", err)
@@ -541,7 +541,7 @@ func TestDeleteSandbox(t *testing.T) {
 	}
 	rt.containers["mock-del"] = &mockContainer{id: "mock-del", state: "running"}
 
-	req, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/sandboxes/del-sb", nil)
+	req, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/sandboxes/del-sb", http.NoBody)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("DELETE sandbox: %v", err)

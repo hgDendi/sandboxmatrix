@@ -21,15 +21,15 @@ const (
 	LabelPoolBlueprint = "sandboxmatrix/pool-blueprint"
 )
 
-// PoolConfig configures a pool for a blueprint.
-type PoolConfig struct {
+// Config configures a pool for a blueprint.
+type Config struct {
 	BlueprintPath string
 	MinReady      int // minimum warm instances to maintain
 	MaxSize       int // maximum pool size
 }
 
-// PoolStats holds observable statistics for a single blueprint pool.
-type PoolStats struct {
+// Stats holds observable statistics for a single blueprint pool.
+type Stats struct {
 	BlueprintPath string
 	MinReady      int
 	MaxSize       int
@@ -82,7 +82,7 @@ func New(rt runtime.Runtime, store state.Store) *Pool {
 }
 
 // Configure sets up a pool for a blueprint.
-func (p *Pool) Configure(cfg PoolConfig) error {
+func (p *Pool) Configure(cfg Config) error {
 	if cfg.BlueprintPath == "" {
 		return fmt.Errorf("blueprint path is required")
 	}
@@ -169,7 +169,7 @@ func (p *Pool) Claim(ctx context.Context, blueprintPath string) (string, error) 
 }
 
 // Release returns an instance to the pool (or destroys it if pool is full).
-func (p *Pool) Release(ctx context.Context, containerID string, blueprintPath string) error {
+func (p *Pool) Release(ctx context.Context, containerID, blueprintPath string) error {
 	p.mu.Lock()
 	bp, ok := p.pools[blueprintPath]
 	if !ok {
@@ -267,9 +267,6 @@ func (p *Pool) fillPool(ctx context.Context, blueprintPath string) {
 				p.mu.Unlock()
 				return
 			}
-			if needed > bp.MaxSize-total {
-				needed = bp.MaxSize - total
-			}
 		}
 
 		bp.Creating++
@@ -294,10 +291,10 @@ func (p *Pool) createWarmContainer(ctx context.Context, image, blueprintName, bl
 		Name:  fmt.Sprintf("smx-pool-%s-%d", blueprintName, time.Now().UnixNano()),
 		Image: image,
 		Labels: map[string]string{
-			LabelPool:          "true",
-			LabelPoolBlueprint: blueprintPath,
-			"sandboxmatrix/managed":  "true",
-			"sandboxmatrix/name":     fmt.Sprintf("pool-%s", blueprintName),
+			LabelPool:               "true",
+			LabelPoolBlueprint:      blueprintPath,
+			"sandboxmatrix/managed": "true",
+			"sandboxmatrix/name":    fmt.Sprintf("pool-%s", blueprintName),
 		},
 	}
 
@@ -322,17 +319,17 @@ func (p *Pool) createWarmContainer(ctx context.Context, image, blueprintName, bl
 }
 
 // Stats returns pool statistics for all configured blueprints.
-func (p *Pool) Stats() map[string]PoolStats {
+func (p *Pool) Stats() map[string]Stats {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	result := make(map[string]PoolStats, len(p.pools))
+	result := make(map[string]Stats, len(p.pools))
 	for path, bp := range p.pools {
 		var avg time.Duration
 		if bp.totalClaims > 0 {
 			avg = time.Duration(bp.totalClaimNs / bp.totalClaims)
 		}
-		result[path] = PoolStats{
+		result[path] = Stats{
 			BlueprintPath: path,
 			MinReady:      bp.MinReady,
 			MaxSize:       bp.MaxSize,

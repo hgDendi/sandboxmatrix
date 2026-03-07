@@ -307,7 +307,7 @@ func handleListSnapshots(ctrl *controller.Controller) http.HandlerFunc {
 // --------------------------------------------------------------------
 
 type createMatrixRequest struct {
-	Name    string                 `json:"name"`
+	Name    string                  `json:"name"`
 	Members []v1alpha1.MatrixMember `json:"members"`
 }
 

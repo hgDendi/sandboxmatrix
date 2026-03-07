@@ -11,8 +11,8 @@ import (
 )
 
 const (
-	defaultEtcdPrefix  = "/sandboxmatrix/"
-	etcdOpTimeout      = 5 * time.Second
+	defaultEtcdPrefix   = "/sandboxmatrix/"
+	etcdOpTimeout       = 5 * time.Second
 	sandboxesKeySegment = "sandboxes/"
 	sessionsKeySegment  = "sessions/"
 	matricesKeySegment  = "matrices/"

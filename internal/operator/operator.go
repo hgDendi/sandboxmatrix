@@ -6,14 +6,14 @@
 //
 // Architecture overview:
 //
-//   Kubernetes API Server
-//       |
-//       v
-//   controller-runtime Manager
-//       |
-//       +-- SandboxReconciler  --> watches Sandbox CRDs  --> calls internal/controller
-//       +-- MatrixReconciler   --> watches Matrix CRDs   --> orchestrates sandbox groups
-//       +-- BlueprintReconciler --> watches Blueprint CRDs --> validates and caches blueprints
+//	Kubernetes API Server
+//	    |
+//	    v
+//	controller-runtime Manager
+//	    |
+//	    +-- SandboxReconciler  --> watches Sandbox CRDs  --> calls internal/controller
+//	    +-- MatrixReconciler   --> watches Matrix CRDs   --> orchestrates sandbox groups
+//	    +-- BlueprintReconciler --> watches Blueprint CRDs --> validates and caches blueprints
 //
 // The operator translates declarative K8s resources into imperative calls to the
 // existing sandboxMatrix controller and runtime interfaces.
@@ -56,7 +56,7 @@ func New(namespace string) *Operator {
 //   - Starts all registered controllers
 //   - Begins watching CRD events (create/update/delete)
 //   - Runs leader election if configured
-//   - Blocks until the context is cancelled
+//   - Blocks until the context is canceled
 //
 // For now, this is a placeholder that returns an error directing users
 // to install the CRDs first.

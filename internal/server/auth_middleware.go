@@ -9,10 +9,10 @@ import (
 	v1alpha1 "github.com/hg-dendi/sandboxmatrix/pkg/api/v1alpha1"
 )
 
-// authMiddleware returns an HTTP middleware that enforces RBAC and records
+// AuthMiddleware returns an HTTP middleware that enforces RBAC and records
 // audit entries. If rbac is nil, the middleware is a no-op (backward
 // compatible: all requests are allowed without authentication).
-func authMiddleware(rbac *auth.RBAC, audit *auth.AuditLog) func(http.Handler) http.Handler {
+func AuthMiddleware(rbac *auth.RBAC, audit *auth.AuditLog) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// If no RBAC is configured, allow all requests (backward compatible).
@@ -82,7 +82,7 @@ func authMiddleware(rbac *auth.RBAC, audit *auth.AuditLog) func(http.Handler) ht
 
 // mapRequestToPermission maps an HTTP method and URL path to a resource name
 // and action string used by the RBAC system.
-func mapRequestToPermission(method string, path string) (resource string, action string) {
+func mapRequestToPermission(method, path string) (resource, action string) {
 	// Strip the /api/v1/ prefix.
 	trimmed := strings.TrimPrefix(path, "/api/v1/")
 
@@ -140,7 +140,7 @@ func mapRequestToPermission(method string, path string) (resource string, action
 }
 
 // recordAudit records an audit entry if the audit log is configured.
-func recordAudit(audit *auth.AuditLog, userName string, r *http.Request, result string, detail string) {
+func recordAudit(audit *auth.AuditLog, userName string, r *http.Request, result, detail string) {
 	if audit == nil {
 		return
 	}
@@ -155,7 +155,7 @@ func recordAudit(audit *auth.AuditLog, userName string, r *http.Request, result 
 		resourcePath = resource + "/" + parts[1]
 	}
 
-	audit.Record(v1alpha1.AuditEntry{
+	audit.Record(&v1alpha1.AuditEntry{
 		Timestamp: time.Now(),
 		User:      userName,
 		Action:    resource + "." + action,

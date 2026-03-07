@@ -37,7 +37,7 @@ func NewAuditLog(maxSize int, filePath string) (*AuditLog, error) {
 }
 
 // Record adds an audit entry. The timestamp is set to now if zero.
-func (a *AuditLog) Record(entry v1alpha1.AuditEntry) {
+func (a *AuditLog) Record(entry *v1alpha1.AuditEntry) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
@@ -45,7 +45,7 @@ func (a *AuditLog) Record(entry v1alpha1.AuditEntry) {
 		entry.Timestamp = time.Now()
 	}
 
-	a.entries = append(a.entries, entry)
+	a.entries = append(a.entries, *entry)
 
 	// Enforce ring buffer size.
 	if a.maxSize > 0 && len(a.entries) > a.maxSize {
@@ -66,7 +66,7 @@ func (a *AuditLog) Record(entry v1alpha1.AuditEntry) {
 // is empty, it matches all. limit controls the maximum number of entries
 // returned (0 means all matching entries). Results are returned in reverse
 // chronological order (newest first).
-func (a *AuditLog) Query(user string, action string, limit int) []v1alpha1.AuditEntry {
+func (a *AuditLog) Query(user, action string, limit int) []v1alpha1.AuditEntry {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 

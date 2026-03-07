@@ -223,7 +223,7 @@ func TestConfigurePool(t *testing.T) {
 	pl, _, bp := newTestPool(t)
 
 	// Valid configuration.
-	err := pl.Configure(PoolConfig{
+	err := pl.Configure(Config{
 		BlueprintPath: bp,
 		MinReady:      2,
 		MaxSize:       5,
@@ -257,27 +257,27 @@ func TestConfigurePoolErrors(t *testing.T) {
 	pl, _, bp := newTestPool(t)
 
 	// Empty blueprint path.
-	if err := pl.Configure(PoolConfig{}); err == nil {
+	if err := pl.Configure(Config{}); err == nil {
 		t.Fatal("expected error for empty blueprint path")
 	}
 
 	// Negative MinReady.
-	if err := pl.Configure(PoolConfig{BlueprintPath: bp, MinReady: -1}); err == nil {
+	if err := pl.Configure(Config{BlueprintPath: bp, MinReady: -1}); err == nil {
 		t.Fatal("expected error for negative MinReady")
 	}
 
 	// Negative MaxSize.
-	if err := pl.Configure(PoolConfig{BlueprintPath: bp, MaxSize: -1}); err == nil {
+	if err := pl.Configure(Config{BlueprintPath: bp, MaxSize: -1}); err == nil {
 		t.Fatal("expected error for negative MaxSize")
 	}
 
 	// MinReady > MaxSize.
-	if err := pl.Configure(PoolConfig{BlueprintPath: bp, MinReady: 5, MaxSize: 2}); err == nil {
+	if err := pl.Configure(Config{BlueprintPath: bp, MinReady: 5, MaxSize: 2}); err == nil {
 		t.Fatal("expected error for MinReady > MaxSize")
 	}
 
 	// Invalid blueprint file.
-	if err := pl.Configure(PoolConfig{BlueprintPath: "/nonexistent/blueprint.yaml", MinReady: 1, MaxSize: 5}); err == nil {
+	if err := pl.Configure(Config{BlueprintPath: "/nonexistent/blueprint.yaml", MinReady: 1, MaxSize: 5}); err == nil {
 		t.Fatal("expected error for invalid blueprint path")
 	}
 }
@@ -285,7 +285,7 @@ func TestConfigurePoolErrors(t *testing.T) {
 func TestClaimFromWarmPool(t *testing.T) {
 	pl, rt, bp := newTestPool(t)
 
-	err := pl.Configure(PoolConfig{
+	err := pl.Configure(Config{
 		BlueprintPath: bp,
 		MinReady:      2,
 		MaxSize:       5,
@@ -355,7 +355,7 @@ func TestClaimFromWarmPool(t *testing.T) {
 func TestClaimWhenEmpty(t *testing.T) {
 	pl, rt, bp := newTestPool(t)
 
-	err := pl.Configure(PoolConfig{
+	err := pl.Configure(Config{
 		BlueprintPath: bp,
 		MinReady:      0, // No pre-warming.
 		MaxSize:       5,
@@ -401,7 +401,7 @@ func TestClaimUnconfiguredBlueprint(t *testing.T) {
 func TestRelease(t *testing.T) {
 	pl, rt, bp := newTestPool(t)
 
-	err := pl.Configure(PoolConfig{
+	err := pl.Configure(Config{
 		BlueprintPath: bp,
 		MinReady:      0,
 		MaxSize:       5,
@@ -440,7 +440,7 @@ func TestRelease(t *testing.T) {
 func TestReleaseWhenPoolFull(t *testing.T) {
 	pl, rt, bp := newTestPool(t)
 
-	err := pl.Configure(PoolConfig{
+	err := pl.Configure(Config{
 		BlueprintPath: bp,
 		MinReady:      0,
 		MaxSize:       1,
@@ -502,7 +502,7 @@ func TestReleaseUnconfiguredBlueprint(t *testing.T) {
 func TestDrain(t *testing.T) {
 	pl, rt, bp := newTestPool(t)
 
-	err := pl.Configure(PoolConfig{
+	err := pl.Configure(Config{
 		BlueprintPath: bp,
 		MinReady:      3,
 		MaxSize:       10,
@@ -551,10 +551,10 @@ func TestDrain(t *testing.T) {
 	}
 }
 
-func TestPoolStats(t *testing.T) {
+func TestStats(t *testing.T) {
 	pl, _, bp := newTestPool(t)
 
-	err := pl.Configure(PoolConfig{
+	err := pl.Configure(Config{
 		BlueprintPath: bp,
 		MinReady:      2,
 		MaxSize:       5,
@@ -630,7 +630,7 @@ func TestPoolStats(t *testing.T) {
 func TestDrainWithoutWarm(t *testing.T) {
 	pl, _, bp := newTestPool(t)
 
-	err := pl.Configure(PoolConfig{
+	err := pl.Configure(Config{
 		BlueprintPath: bp,
 		MinReady:      0,
 		MaxSize:       5,
