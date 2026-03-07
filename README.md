@@ -24,6 +24,9 @@ AI coding agents need isolated, reproducible environments to safely execute code
 | Pluggable runtimes | No | No | No | No | **Docker/gVisor/Firecracker** |
 | REST API + Web Dashboard | Yes | Yes | Yes | No | **Yes** |
 | Pre-warmed pools | Yes | Yes | No | No | **Yes** |
+| RBAC + Audit logging | Yes | Yes | No | No | **Yes** |
+| K8s Operator + Helm | No | No | No | No | **Yes** |
+| Distributed state (etcd) | N/A | N/A | No | No | **Yes** |
 
 ## Cloud Native Mapping
 
@@ -39,6 +42,9 @@ PersistentVolume   ->     Workspace
 Job                ->     Session
 CRI (containerd)   ->     Runtime Interface (Docker/gVisor/Firecracker)
 Helm Chart         ->     Blueprint
+RBAC               ->     RBAC (admin/operator/viewer)
+etcd               ->     etcd (distributed state)
+CRD + Operator     ->     CRD + Operator
 ```
 
 ## Features
@@ -57,28 +63,34 @@ Helm Chart         ->     Blueprint
 - **Blueprint system** -- declarative YAML environment definitions with validation
 - **Pluggable runtime architecture** -- Docker, gVisor, Firecracker backends
 - **Network policies** -- configurable per-blueprint (none, host, bridge, isolate)
-- **Persistent state** -- file-based JSON or BoltDB storage survives restarts
+- **RBAC** -- role-based access control (admin/operator/viewer) with token auth
+- **Audit logging** -- every action recorded with user, resource, and result
+- **Persistent state** -- file-based JSON, BoltDB, or etcd for distributed deployments
+- **Kubernetes operator** -- CRDs for Sandbox/Matrix/Blueprint with Helm chart
 - **SDKs** -- Python and TypeScript clients for programmatic access
 
 ## Architecture
 
 ```
-+--------------------------------------------------------------+
-|                      Interface Layer                          |
-|  CLI (smx)  |  REST API  |  SDKs (Go/Python/TS)  |  Web UI  |
-+--------------------------------------------------------------+
-|                      Agent Plane                              |
-|  MCP Server  |  MCP Client  |  A2A Gateway                   |
-+--------------------------------------------------------------+
-|                      Control Plane                            |
-|  API Server  |  Scheduler  |  State Manager  |  Pool Manager  |
-+--------------------------------------------------------------+
-|                      Runtime Plane (pluggable)                |
-|  Docker  |  Firecracker  |  gVisor  |  Kata  |  WASM         |
-+--------------------------------------------------------------+
-|                      Storage Plane                            |
-|  Workspaces  |  Snapshots  |  Templates  |  State (JSON/Bolt) |
-+--------------------------------------------------------------+
++----------------------------------------------------------------------+
+|                        Interface Layer                                 |
+|  CLI (smx)  |  REST API  |  SDKs (Go/Python/TS)  |  Web Dashboard   |
++----------------------------------------------------------------------+
+|                        Agent Plane                                     |
+|  MCP Server (10 tools)  |  A2A Gateway  |  Session Manager            |
++----------------------------------------------------------------------+
+|                        Control Plane                                   |
+|  API Server  |  Scheduler  |  Pool Manager  |  RBAC + Audit          |
++----------------------------------------------------------------------+
+|                        Runtime Plane (pluggable)                       |
+|  Docker  |  Firecracker  |  gVisor  |  Kata  |  WASM                 |
++----------------------------------------------------------------------+
+|                        Storage Plane                                   |
+|  Workspaces  |  Snapshots  |  State (JSON / BoltDB / etcd)           |
++----------------------------------------------------------------------+
+|                        Deployment                                      |
+|  Single binary  |  K8s Operator + CRDs  |  Helm Chart                |
++----------------------------------------------------------------------+
 ```
 
 ## Quick Start
@@ -171,6 +183,13 @@ cd sandboxmatrix && make build
 | `smx server start` | | Start the REST API server |
 | `smx dashboard` | | Start the web dashboard |
 | `smx mcp serve` | | Start the MCP server (stdio) |
+| **Auth** | | |
+| `smx auth add-user <name>` | | Add user with role and generate token |
+| `smx auth list-users` | | List all users |
+| `smx auth remove-user <name>` | | Remove a user |
+| `smx auth audit` | | View audit log |
+| **Kubernetes** | | |
+| `smx operator start` | | Start the K8s operator (scaffold) |
 | **Other** | | |
 | `smx blueprint validate <file>` | `bp validate` | Validate a blueprint YAML |
 | `smx blueprint inspect <file>` | `bp inspect` | Display blueprint details |
@@ -291,13 +310,42 @@ make e2e          # Run end-to-end tests (requires Docker)
 make clean        # Remove build artifacts
 ```
 
+## Kubernetes Deployment
+
+Deploy sandboxMatrix as a K8s operator:
+
+```bash
+# Install CRDs
+kubectl apply -f deploy/crds/
+
+# Deploy with kustomize
+kubectl apply -k deploy/
+
+# Or deploy with Helm
+helm install sandboxmatrix deploy/helm/sandboxmatrix/
+```
+
+Then manage sandboxes declaratively:
+
+```yaml
+apiVersion: smx.sandboxmatrix.dev/v1alpha1
+kind: Sandbox
+metadata:
+  name: my-sandbox
+spec:
+  blueprintRef: python-dev
+  resources:
+    cpu: "2"
+    memory: 2Gi
+```
+
 ## Roadmap
 
 - [x] **Phase 1** -- CLI scaffolding, Docker sandbox lifecycle, blueprint system
 - [x] **Phase 2** -- Snapshot/restore, MCP server, session management, Matrix orchestration
 - [x] **Phase 3** -- Network policies, gVisor/Firecracker runtimes, A2A gateway
 - [x] **Phase 4** -- REST API server, web dashboard, pre-warmed pools, GPU passthrough, SDKs
-- [ ] **Phase 5** -- Multi-node scheduling, K8s operator, distributed state, RBAC
+- [x] **Phase 5** -- RBAC, distributed state (etcd), K8s operator + Helm chart
 
 ## Contributing
 
