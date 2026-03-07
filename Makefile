@@ -15,7 +15,7 @@ GO := go
 GOFLAGS := -trimpath
 GOLANGCI_LINT := golangci-lint
 
-.PHONY: all build install test test-race lint fmt vet clean help
+.PHONY: all build install test test-race lint fmt vet clean e2e help
 
 all: lint test build
 
@@ -44,6 +44,9 @@ fmt:
 
 vet:
 	$(GO) vet ./...
+
+e2e:
+	bash test/e2e_test.sh
 
 clean:
 	rm -rf bin/ dist/ coverage.out coverage.html
