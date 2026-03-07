@@ -1,5 +1,5 @@
 # Binaries
-smx
+/smx
 *.exe
 *.exe~
 *.dll
