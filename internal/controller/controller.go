@@ -59,6 +59,14 @@ func (c *Controller) Create(ctx context.Context, opts CreateOptions) (*v1alpha1.
 		},
 	}
 
+	// GPU passthrough.
+	if bp.Spec.Resources.GPU != nil {
+		cfg.GPU = &runtime.GPUConfig{
+			Count:  bp.Spec.Resources.GPU.Count,
+			Driver: bp.Spec.Resources.GPU.Driver,
+		}
+	}
+
 	// Network policy.
 	if opts.NetworkName != "" {
 		// Explicit network name takes precedence (e.g. matrix isolation).
@@ -285,6 +293,14 @@ func (c *Controller) Restore(ctx context.Context, name, snapshotID, newName stri
 			"sandboxmatrix/blueprint": srcSb.Spec.BlueprintRef,
 			"sandboxmatrix/restored":  "true",
 		},
+	}
+
+	// GPU passthrough.
+	if srcSb.Spec.Resources.GPU != nil {
+		cfg.GPU = &runtime.GPUConfig{
+			Count:  srcSb.Spec.Resources.GPU.Count,
+			Driver: srcSb.Spec.Resources.GPU.Driver,
+		}
 	}
 
 	// Create sandbox state record.

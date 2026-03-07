@@ -31,15 +31,19 @@ isolated development environments with pluggable runtime backends.`,
 		newBlueprintCmd(),
 		newMCPCmd(),
 		newA2ACmd(),
+		newServerCmd(),
+		newDashboardCmd(),
 	)
 
 	// Runtime commands require Docker; initialize lazily on use.
 	sandboxCmd := newLazySandboxCmd()
 	sessionCmd := newLazySessionCmd()
 	matrixCmd := newLazyMatrixCmd()
+	poolCmd := newPoolCmd()
 	cmd.AddCommand(sandboxCmd)
 	cmd.AddCommand(sessionCmd)
 	cmd.AddCommand(matrixCmd)
+	cmd.AddCommand(poolCmd)
 
 	return cmd
 }
@@ -102,6 +106,7 @@ func newLazySandboxCmd() *cobra.Command {
 		newSandboxSnapshotCmdLazy(&ctrl),
 		newSandboxRestoreCmdLazy(&ctrl),
 		newSandboxSnapshotsCmdLazy(&ctrl),
+		newSandboxGPUCheckCmdLazy(&ctrl),
 	)
 
 	return cmd

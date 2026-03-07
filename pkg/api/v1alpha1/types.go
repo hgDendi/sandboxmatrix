@@ -31,11 +31,18 @@ type TypeMeta struct {
 	Kind       string `json:"kind" yaml:"kind"`
 }
 
+// GPUSpec defines GPU resource configuration.
+type GPUSpec struct {
+	Count  int    `json:"count,omitempty" yaml:"count,omitempty"`
+	Driver string `json:"driver,omitempty" yaml:"driver,omitempty"` // "nvidia" (default)
+}
+
 // Resources defines compute resource limits.
 type Resources struct {
-	CPU    string `json:"cpu,omitempty" yaml:"cpu,omitempty"`
-	Memory string `json:"memory,omitempty" yaml:"memory,omitempty"`
-	Disk   string `json:"disk,omitempty" yaml:"disk,omitempty"`
+	CPU    string   `json:"cpu,omitempty" yaml:"cpu,omitempty"`
+	Memory string   `json:"memory,omitempty" yaml:"memory,omitempty"`
+	Disk   string   `json:"disk,omitempty" yaml:"disk,omitempty"`
+	GPU    *GPUSpec `json:"gpu,omitempty" yaml:"gpu,omitempty"`
 }
 
 // SetupStep defines a single setup command.

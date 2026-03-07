@@ -1,0 +1,22 @@
+apiVersion: smx/v1alpha1
+kind: Blueprint
+metadata:
+  name: gpu-python-dev
+  version: "1.0.0"
+spec:
+  base: nvidia/cuda:12.4.1-runtime-ubuntu22.04
+  runtime: docker
+  resources:
+    cpu: "4"
+    memory: 8Gi
+    disk: 30Gi
+    gpu:
+      count: 1
+      driver: nvidia
+  setup:
+    - run: apt-get update && apt-get install -y python3 python3-pip
+    - run: pip3 install torch torchvision
+  workspace:
+    mountPath: /workspace
+  network:
+    expose: [8888]

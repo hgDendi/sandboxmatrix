@@ -52,6 +52,16 @@ func Validate(bp *v1alpha1.Blueprint) []error {
 		errs = append(errs, fmt.Errorf("spec.runtime is required"))
 	}
 
+	// GPU validation.
+	if bp.Spec.Resources.GPU != nil {
+		if bp.Spec.Resources.GPU.Count <= 0 {
+			errs = append(errs, fmt.Errorf("spec.resources.gpu.count must be greater than 0"))
+		}
+		if bp.Spec.Resources.GPU.Driver == "" {
+			bp.Spec.Resources.GPU.Driver = "nvidia"
+		}
+	}
+
 	return errs
 }
 

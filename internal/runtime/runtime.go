@@ -13,6 +13,12 @@ type NetworkConfig struct {
 	DNS  []string // custom DNS servers
 }
 
+// GPUConfig holds GPU passthrough configuration for a sandbox.
+type GPUConfig struct {
+	Count  int
+	Driver string // "nvidia"
+}
+
 // CreateConfig holds configuration for creating a new sandbox runtime.
 type CreateConfig struct {
 	Name    string
@@ -20,6 +26,7 @@ type CreateConfig struct {
 	CPU     string
 	Memory  string
 	Disk    string
+	GPU     *GPUConfig
 	Mounts  []Mount
 	Ports   []PortMapping
 	Env     map[string]string

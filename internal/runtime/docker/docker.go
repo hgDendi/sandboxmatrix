@@ -126,6 +126,22 @@ func (r *Runtime) Create(ctx context.Context, cfg *runtime.CreateConfig) (string
 		}
 	}
 
+	// GPU passthrough.
+	if cfg.GPU != nil && cfg.GPU.Count > 0 {
+		driver := cfg.GPU.Driver
+		if driver == "" {
+			driver = "nvidia"
+		}
+		count := cfg.GPU.Count
+		hostCfg.DeviceRequests = []container.DeviceRequest{
+			{
+				Driver:       driver,
+				Count:        count,
+				Capabilities: [][]string{{"gpu"}},
+			},
+		}
+	}
+
 	// Mounts.
 	for _, m := range cfg.Mounts {
 		hostCfg.Binds = append(hostCfg.Binds, formatBind(m))
