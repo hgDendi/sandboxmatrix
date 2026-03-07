@@ -40,6 +40,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         goos: [linux, darwin, windows]
         goarch: [amd64, arm64]
@@ -52,4 +53,4 @@ jobs:
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
-        run: go build -trimpath -o /dev/null ./cmd/smx
+        run: go build -trimpath -o build_test_binary ./cmd/smx
