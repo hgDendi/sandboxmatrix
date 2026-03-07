@@ -1,0 +1,19 @@
+apiVersion: smx/v1alpha1
+kind: Blueprint
+metadata:
+  name: go-dev
+  version: "1.0.0"
+spec:
+  base: golang:1.25-bookworm
+  runtime: docker
+  resources:
+    cpu: "2"
+    memory: 4Gi
+    disk: 20Gi
+  setup:
+    - run: go install golang.org/x/tools/gopls@latest
+    - run: go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+  workspace:
+    mountPath: /workspace
+  network:
+    expose: [8080]

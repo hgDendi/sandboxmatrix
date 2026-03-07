@@ -1,0 +1,18 @@
+apiVersion: smx/v1alpha1
+kind: Blueprint
+metadata:
+  name: rust-dev
+  version: "1.0.0"
+spec:
+  base: rust:1.84-slim-bookworm
+  runtime: docker
+  resources:
+    cpu: "4"
+    memory: 4Gi
+    disk: 20Gi
+  setup:
+    - run: rustup component add rust-analyzer clippy rustfmt
+  workspace:
+    mountPath: /workspace
+  network:
+    expose: [8080]

@@ -1,0 +1,21 @@
+apiVersion: smx/v1alpha1
+kind: Blueprint
+metadata:
+  name: python-dev
+  version: "1.0.0"
+spec:
+  base: python:3.12-slim
+  runtime: docker
+  resources:
+    cpu: "2"
+    memory: 2Gi
+    disk: 10Gi
+  setup:
+    - run: pip install poetry ruff mypy
+  toolchains:
+    - name: python-lsp
+      image: smx-toolchains/pylsp:latest
+  workspace:
+    mountPath: /workspace
+  network:
+    expose: [8000]
