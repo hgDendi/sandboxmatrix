@@ -12,6 +12,7 @@ const (
 	SandboxStateRunning    SandboxState = "Running"
 	SandboxStateStopped    SandboxState = "Stopped"
 	SandboxStateError      SandboxState = "Error"
+	SandboxStateReady      SandboxState = "Ready"
 	SandboxStateDestroying SandboxState = "Destroying"
 	SandboxStateDestroyed  SandboxState = "Destroyed"
 )
@@ -80,15 +81,38 @@ type NetworkSpec struct {
 	AllowDNS bool          `json:"allowDNS,omitempty" yaml:"allowDNS,omitempty"`
 }
 
+// DeviceMapping defines a host device to pass through to a sandbox.
+type DeviceMapping struct {
+	HostPath      string `json:"hostPath" yaml:"hostPath"`
+	ContainerPath string `json:"containerPath,omitempty" yaml:"containerPath,omitempty"`
+	Permissions   string `json:"permissions,omitempty" yaml:"permissions,omitempty"` // "rwm", "rw", "r"
+	Optional      bool   `json:"optional,omitempty" yaml:"optional,omitempty"`       // skip if device not found
+}
+
+// ProbeConfig defines a readiness or liveness probe for a sandbox.
+type ProbeConfig struct {
+	Type             string   `json:"type" yaml:"type"`                                               // "exec", "http", "tcp"
+	Command          []string `json:"command,omitempty" yaml:"command,omitempty"`                      // exec type
+	Path             string   `json:"path,omitempty" yaml:"path,omitempty"`                            // http type
+	Port             int      `json:"port,omitempty" yaml:"port,omitempty"`                            // http/tcp type
+	InitialDelaySec  int      `json:"initialDelaySec,omitempty" yaml:"initialDelaySec,omitempty"`
+	PeriodSec        int      `json:"periodSec,omitempty" yaml:"periodSec,omitempty"`
+	TimeoutSec       int      `json:"timeoutSec,omitempty" yaml:"timeoutSec,omitempty"`
+	SuccessThreshold int      `json:"successThreshold,omitempty" yaml:"successThreshold,omitempty"`
+	FailureThreshold int      `json:"failureThreshold,omitempty" yaml:"failureThreshold,omitempty"`
+}
+
 // BlueprintSpec defines the desired state of a sandbox environment.
 type BlueprintSpec struct {
-	Base       string        `json:"base" yaml:"base"`
-	Runtime    string        `json:"runtime" yaml:"runtime"`
-	Resources  Resources     `json:"resources,omitempty" yaml:"resources,omitempty"`
-	Setup      []SetupStep   `json:"setup,omitempty" yaml:"setup,omitempty"`
-	Toolchains []Toolchain   `json:"toolchains,omitempty" yaml:"toolchains,omitempty"`
-	Workspace  WorkspaceSpec `json:"workspace,omitempty" yaml:"workspace,omitempty"`
-	Network    NetworkSpec   `json:"network,omitempty" yaml:"network,omitempty"`
+	Base           string          `json:"base" yaml:"base"`
+	Runtime        string          `json:"runtime" yaml:"runtime"`
+	Resources      Resources       `json:"resources,omitempty" yaml:"resources,omitempty"`
+	Setup          []SetupStep     `json:"setup,omitempty" yaml:"setup,omitempty"`
+	Toolchains     []Toolchain     `json:"toolchains,omitempty" yaml:"toolchains,omitempty"`
+	Workspace      WorkspaceSpec   `json:"workspace,omitempty" yaml:"workspace,omitempty"`
+	Network        NetworkSpec     `json:"network,omitempty" yaml:"network,omitempty"`
+	Devices        []DeviceMapping `json:"devices,omitempty" yaml:"devices,omitempty"`
+	ReadinessProbe *ProbeConfig    `json:"readinessProbe,omitempty" yaml:"readinessProbe,omitempty"`
 }
 
 // Blueprint defines a reusable sandbox environment template.
@@ -100,19 +124,22 @@ type Blueprint struct {
 
 // SandboxSpec defines the desired state of a sandbox.
 type SandboxSpec struct {
-	BlueprintRef string        `json:"blueprintRef" yaml:"blueprintRef"`
-	Resources    Resources     `json:"resources,omitempty" yaml:"resources,omitempty"`
-	Workspace    WorkspaceSpec `json:"workspace,omitempty" yaml:"workspace,omitempty"`
+	BlueprintRef  string        `json:"blueprintRef" yaml:"blueprintRef"`
+	BlueprintPath string        `json:"blueprintPath,omitempty" yaml:"blueprintPath,omitempty"` // original file path for restore
+	Resources     Resources     `json:"resources,omitempty" yaml:"resources,omitempty"`
+	Workspace     WorkspaceSpec `json:"workspace,omitempty" yaml:"workspace,omitempty"`
 }
 
 // SandboxStatus holds the observed state of a sandbox.
 type SandboxStatus struct {
-	State     SandboxState `json:"state" yaml:"state"`
-	RuntimeID string       `json:"runtimeID,omitempty" yaml:"runtimeID,omitempty"`
-	IP        string       `json:"ip,omitempty" yaml:"ip,omitempty"`
-	StartedAt *time.Time   `json:"startedAt,omitempty" yaml:"startedAt,omitempty"`
-	StoppedAt *time.Time   `json:"stoppedAt,omitempty" yaml:"stoppedAt,omitempty"`
-	Message   string       `json:"message,omitempty" yaml:"message,omitempty"`
+	State      SandboxState `json:"state" yaml:"state"`
+	RuntimeID  string       `json:"runtimeID,omitempty" yaml:"runtimeID,omitempty"`
+	IP         string       `json:"ip,omitempty" yaml:"ip,omitempty"`
+	StartedAt  *time.Time   `json:"startedAt,omitempty" yaml:"startedAt,omitempty"`
+	ReadyAt    *time.Time   `json:"readyAt,omitempty" yaml:"readyAt,omitempty"`
+	StoppedAt  *time.Time   `json:"stoppedAt,omitempty" yaml:"stoppedAt,omitempty"`
+	Message    string       `json:"message,omitempty" yaml:"message,omitempty"`
+	ProbeError string       `json:"probeError,omitempty" yaml:"probeError,omitempty"`
 }
 
 // Sandbox represents an isolated development environment.
@@ -158,12 +185,37 @@ type MatrixMember struct {
 	Blueprint string `json:"blueprint" yaml:"blueprint"`
 }
 
+// ShardingConfig defines how tasks are distributed across matrix members.
+type ShardingConfig struct {
+	Strategy string `json:"strategy" yaml:"strategy"` // "round-robin", "hash", "balanced"
+	KeyField string `json:"keyField,omitempty" yaml:"keyField,omitempty"`
+}
+
+// AggregationConfig defines how results are collected from matrix members.
+type AggregationConfig struct {
+	Strategy   string `json:"strategy" yaml:"strategy"`     // "collect-all", "first-success", "majority"
+	TimeoutSec int    `json:"timeoutSec" yaml:"timeoutSec"`
+}
+
+// TaskResult holds the result of a task executed by a matrix member.
+type TaskResult struct {
+	MemberName  string     `json:"memberName"`
+	TaskID      string     `json:"taskID"`
+	Status      string     `json:"status"` // "success", "failed", "timeout"
+	Output      string     `json:"output"`
+	Error       string     `json:"error,omitempty"`
+	CompletedAt *time.Time `json:"completedAt,omitempty"`
+}
+
 // Matrix represents a group of coordinated sandboxes.
 type Matrix struct {
-	TypeMeta `json:",inline" yaml:",inline"`
-	Metadata ObjectMeta     `json:"metadata" yaml:"metadata"`
-	Members  []MatrixMember `json:"members" yaml:"members"`
-	State    MatrixState    `json:"state" yaml:"state"`
+	TypeMeta    `json:",inline" yaml:",inline"`
+	Metadata    ObjectMeta         `json:"metadata" yaml:"metadata"`
+	Members     []MatrixMember     `json:"members" yaml:"members"`
+	State       MatrixState        `json:"state" yaml:"state"`
+	Sharding    *ShardingConfig    `json:"sharding,omitempty" yaml:"sharding,omitempty"`
+	Aggregation *AggregationConfig `json:"aggregation,omitempty" yaml:"aggregation,omitempty"`
+	Results     []TaskResult       `json:"results,omitempty" yaml:"results,omitempty"`
 }
 
 // Role defines a set of permissions.

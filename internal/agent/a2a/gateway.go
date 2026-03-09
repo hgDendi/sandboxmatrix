@@ -107,6 +107,39 @@ func (g *Gateway) Peek(ctx context.Context, sandboxName string) ([]Message, erro
 	return result, nil
 }
 
+// ReceiveByType retrieves pending messages of the specified type for a sandbox,
+// removing only the matched messages from the inbox. Non-matching messages are
+// preserved, preventing accidental message loss.
+func (g *Gateway) ReceiveByType(ctx context.Context, sandboxName, msgType string) ([]Message, error) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	msgs := g.inboxes[sandboxName]
+	if len(msgs) == 0 {
+		return []Message{}, nil
+	}
+
+	var matched, remaining []Message
+	for _, m := range msgs {
+		if m.Type == msgType {
+			matched = append(matched, m)
+		} else {
+			remaining = append(remaining, m)
+		}
+	}
+
+	if len(remaining) == 0 {
+		delete(g.inboxes, sandboxName)
+	} else {
+		g.inboxes[sandboxName] = remaining
+	}
+
+	if matched == nil {
+		matched = []Message{}
+	}
+	return matched, nil
+}
+
 // Subscribe registers a handler for messages sent to a sandbox.
 func (g *Gateway) Subscribe(sandboxName string, handler HandlerFunc) {
 	g.mu.Lock()

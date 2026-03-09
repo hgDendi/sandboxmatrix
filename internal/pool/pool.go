@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/hg-dendi/sandboxmatrix/internal/runtime"
@@ -57,6 +56,9 @@ type BlueprintPool struct {
 	image string
 	// The original blueprint path (needed for on-demand creation).
 	blueprintPath string
+
+	// Per-blueprint notification channel for the warm loop.
+	notify chan struct{}
 }
 
 // Pool manages pre-warmed sandbox instances ready for immediate use.
@@ -68,7 +70,6 @@ type Pool struct {
 
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
-	notify chan string // signals the warming goroutine for a specific blueprint
 }
 
 // New creates a new Pool manager.
@@ -77,7 +78,6 @@ func New(rt runtime.Runtime, store state.Store) *Pool {
 		runtime: rt,
 		pools:   make(map[string]*BlueprintPool),
 		store:   store,
-		notify:  make(chan string, 64),
 	}
 }
 
@@ -112,6 +112,7 @@ func (p *Pool) Configure(cfg Config) error {
 		Ready:         make([]string, 0),
 		image:         bp.Spec.Base,
 		blueprintPath: cfg.BlueprintPath,
+		notify:        make(chan struct{}, 1),
 	}
 
 	return nil
@@ -137,11 +138,12 @@ func (p *Pool) Claim(ctx context.Context, blueprintPath string) (string, error) 
 		elapsed := time.Since(start)
 		bp.totalClaims++
 		bp.totalClaimNs += elapsed.Nanoseconds()
+		notifyCh := bp.notify
 		p.mu.Unlock()
 
 		// Signal the warmer to create a replacement.
 		select {
-		case p.notify <- blueprintPath:
+		case notifyCh <- struct{}{}:
 		default:
 		}
 
@@ -216,8 +218,19 @@ func (p *Pool) Warm(ctx context.Context) error {
 }
 
 // warmLoop maintains the minimum pool level for a single blueprint.
+// Each blueprint has its own notification channel, eliminating cross-
+// goroutine message bouncing.
 func (p *Pool) warmLoop(ctx context.Context, blueprintPath string) {
 	defer p.wg.Done()
+
+	p.mu.Lock()
+	bp, ok := p.pools[blueprintPath]
+	if !ok {
+		p.mu.Unlock()
+		return
+	}
+	notifyCh := bp.notify
+	p.mu.Unlock()
 
 	// Do an initial fill.
 	p.fillPool(ctx, blueprintPath)
@@ -226,16 +239,8 @@ func (p *Pool) warmLoop(ctx context.Context, blueprintPath string) {
 		select {
 		case <-ctx.Done():
 			return
-		case notifiedPath := <-p.notify:
-			if notifiedPath == blueprintPath {
-				p.fillPool(ctx, blueprintPath)
-			} else {
-				// Put it back for the correct goroutine.
-				select {
-				case p.notify <- notifiedPath:
-				default:
-				}
-			}
+		case <-notifyCh:
+			p.fillPool(ctx, blueprintPath)
 		}
 	}
 }
@@ -311,7 +316,7 @@ func (p *Pool) createWarmContainer(ctx context.Context, image, blueprintName, bl
 
 	p.mu.Lock()
 	if bp, ok := p.pools[blueprintPath]; ok {
-		atomic.AddInt64(&bp.totalCreated, 1)
+		bp.totalCreated++
 	}
 	p.mu.Unlock()
 

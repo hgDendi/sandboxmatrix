@@ -4,9 +4,11 @@ package cli
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 
 	"github.com/hg-dendi/sandboxmatrix/internal/controller"
+	"github.com/hg-dendi/sandboxmatrix/internal/observability"
 	"github.com/hg-dendi/sandboxmatrix/internal/runtime/docker"
 	"github.com/hg-dendi/sandboxmatrix/internal/state"
 	"github.com/spf13/cobra"
@@ -35,6 +37,7 @@ isolated development environments with pluggable runtime backends.`,
 		newDashboardCmd(),
 		newOperatorCmd(),
 		newAuthCmd(),
+		newConfigCmd(),
 	)
 
 	// Runtime commands require Docker; initialize lazily on use.
@@ -116,6 +119,7 @@ func newLazySandboxCmd() *cobra.Command {
 
 // Execute runs the root command.
 func Execute() {
+	observability.InitLogger(slog.LevelInfo)
 	if err := NewRootCmd().Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

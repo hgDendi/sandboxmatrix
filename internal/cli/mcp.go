@@ -3,7 +3,10 @@ package cli
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/hg-dendi/sandboxmatrix/internal/agent/a2a"
 	mcpserver "github.com/hg-dendi/sandboxmatrix/internal/agent/mcp"
@@ -69,6 +72,16 @@ sandboxes using the standard MCP tool-calling interface.`,
 
 			// Create the A2A gateway for agent-to-agent communication.
 			gateway := a2a.New()
+
+			// Handle shutdown signals.
+			ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+			defer stop()
+
+			go func() {
+				<-ctx.Done()
+				slog.Info("MCP server shutting down")
+				os.Exit(0)
+			}()
 
 			// Create and start the MCP server on stdio.
 			srv := mcpserver.NewServer(ctrl, gateway)

@@ -55,6 +55,11 @@ tbody tr:hover{background:rgba(88,166,255,0.04)}
 .matrix-member{background:rgba(88,166,255,0.1);border:1px solid rgba(88,166,255,0.2);padding:0.15rem 0.5rem;border-radius:4px;font-size:0.75rem;font-family:var(--mono)}
 .error-toast{position:fixed;bottom:1rem;right:1rem;background:rgba(248,81,73,0.95);color:#fff;padding:0.75rem 1rem;border-radius:6px;font-size:0.85rem;z-index:100;display:none;max-width:400px}
 .success-toast{position:fixed;bottom:1rem;right:1rem;background:rgba(63,185,80,0.95);color:#fff;padding:0.75rem 1rem;border-radius:6px;font-size:0.85rem;z-index:100;display:none;max-width:400px}
+#terminal-output .stdout{color:var(--text)}
+#terminal-output .stderr{color:var(--red)}
+#terminal-output .cmd{color:var(--accent)}
+#terminal-output .exit-ok{color:var(--green)}
+#terminal-output .exit-fail{color:var(--red)}
 @media(max-width:768px){
   .container{padding:0.75rem}
   table{font-size:0.8rem}
@@ -137,6 +142,19 @@ tbody tr:hover{background:rgba(88,166,255,0.04)}
           <tr><td colspan="6" class="empty">Loading sessions...</td></tr>
         </tbody>
       </table>
+    </div>
+  </section>
+
+  <section id="terminal-section" style="display:none">
+    <h2>Terminal <span class="count" id="term-sandbox">-</span></h2>
+    <div class="card" style="padding:1rem">
+      <div id="terminal-output" style="background:#0d1117;border:1px solid var(--border);border-radius:4px;padding:0.75rem;font-family:var(--mono);font-size:0.8rem;height:300px;overflow-y:auto;white-space:pre-wrap;margin-bottom:0.75rem;color:var(--green)"></div>
+      <div style="display:flex;gap:0.5rem">
+        <span style="color:var(--accent);font-family:var(--mono);line-height:2">$</span>
+        <input id="terminal-input" type="text" placeholder="Enter command..." style="flex:1;background:var(--card);border:1px solid var(--border);border-radius:4px;padding:0.4rem 0.6rem;color:var(--text);font-family:var(--mono);font-size:0.85rem;outline:none" />
+        <button class="btn" onclick="_execCmd()" id="exec-btn">Run</button>
+        <button class="btn" onclick="_closeTerminal()">Close</button>
+      </div>
     </div>
   </section>
 </div>
@@ -252,6 +270,7 @@ tbody tr:hover{background:rgba(88,166,255,0.04)}
         '<td>'+timeAgo(sb.createdAt)+'</td>'+
         '<td class="actions">'+
           (isRunning?'<button class="btn" onclick="_stop(\''+esc(sb.name)+'\')">Stop</button>':'')+
+          (isRunning?'<button class="btn" onclick="_exec(\''+esc(sb.name)+'\')">Exec</button>':'')+
           (isStopped?'<button class="btn btn-success" onclick="_start(\''+esc(sb.name)+'\')">Start</button>':'')+
           '<button class="btn btn-danger" onclick="_destroy(\''+esc(sb.name)+'\')">Destroy</button>'+
         '</td></tr>';
@@ -330,9 +349,69 @@ tbody tr:hover{background:rgba(88,166,255,0.04)}
     }
   }
 
+  let currentTerminalSandbox = null;
+
+  function openTerminal(name) {
+    currentTerminalSandbox = name;
+    $('terminal-section').style.display = '';
+    $('term-sandbox').textContent = name;
+    $('terminal-output').innerHTML = '<span class="cmd">Connected to sandbox: ' + esc(name) + '</span>\n';
+    $('terminal-input').focus();
+  }
+
+  function closeTerminal() {
+    currentTerminalSandbox = null;
+    $('terminal-section').style.display = 'none';
+    $('terminal-output').innerHTML = '';
+  }
+
+  async function execCmd() {
+    if (!currentTerminalSandbox) return;
+    const input = $('terminal-input');
+    const cmd = input.value.trim();
+    if (!cmd) return;
+
+    input.value = '';
+    const output = $('terminal-output');
+    output.innerHTML += '<span class="cmd">$ ' + esc(cmd) + '</span>\n';
+
+    try {
+      const res = await fetch(API + '/sandboxes/' + encodeURIComponent(currentTerminalSandbox) + '/exec', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({command: cmd})
+      });
+      const data = await res.json();
+      if (data.error) {
+        output.innerHTML += '<span class="stderr">' + esc(data.error) + '</span>\n';
+      } else {
+        if (data.stdout) output.innerHTML += '<span class="stdout">' + esc(data.stdout) + '</span>';
+        if (data.stderr) output.innerHTML += '<span class="stderr">' + esc(data.stderr) + '</span>';
+        var exitClass = data.exitCode === 0 ? 'exit-ok' : 'exit-fail';
+        if (data.exitCode !== 0) {
+          output.innerHTML += '<span class="' + exitClass + '">[exit: ' + data.exitCode + ']</span>\n';
+        }
+      }
+    } catch(e) {
+      output.innerHTML += '<span class="stderr">Error: ' + esc(e.message) + '</span>\n';
+    }
+
+    output.scrollTop = output.scrollHeight;
+  }
+
+  window._exec = openTerminal;
+  window._closeTerminal = closeTerminal;
+  window._execCmd = execCmd;
+
   // Initial load and auto-refresh.
   refresh();
   refreshTimer = setInterval(refresh, 5000);
+
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' && document.activeElement === $('terminal-input')) {
+      _execCmd();
+    }
+  });
 })();
 </script>
 </body>

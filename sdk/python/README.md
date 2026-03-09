@@ -66,6 +66,23 @@ client.stop_sandbox("dev")
 client.destroy_sandbox("dev")
 ```
 
+## HTTP Client (REST API)
+
+For direct API access without the CLI binary:
+
+```python
+from sandboxmatrix import HTTPClient
+
+client = HTTPClient(base_url="http://localhost:8080", token="your-token")
+
+# List sandboxes
+sandboxes = client.list_sandboxes()
+
+# Execute command
+result = client.exec("my-sandbox", "python -c 'print(42)'")
+print(result.stdout)
+```
+
 ## Error Handling
 
 ```python

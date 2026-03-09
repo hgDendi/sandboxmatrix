@@ -3,7 +3,10 @@ package cli
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
+	"os/signal"
+	"syscall"
 	"text/tabwriter"
 
 	"github.com/hg-dendi/sandboxmatrix/internal/pool"
@@ -69,7 +72,9 @@ Warm containers are labeled for later identification by pool stats and drain.`,
 
 			fmt.Printf("Warming %d instances for blueprint %s...\n", minReady, blueprintPath)
 
-			ctx := context.Background()
+			ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+			defer stop()
+
 			if err := p.Warm(ctx); err != nil {
 				return fmt.Errorf("warm pool: %w", err)
 			}
@@ -83,6 +88,12 @@ Warm containers are labeled for later identification by pool stats and drain.`,
 
 			// Create containers synchronously.
 			for i := 0; i < minReady; i++ {
+				select {
+				case <-ctx.Done():
+					slog.Info("pool warm interrupted", "completed", i, "total", minReady)
+					return nil
+				default:
+				}
 				id, claimErr := p.Claim(ctx, blueprintPath)
 				if claimErr != nil {
 					return fmt.Errorf("create warm instance %d: %w", i+1, claimErr)

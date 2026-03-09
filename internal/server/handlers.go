@@ -7,8 +7,11 @@ import (
 	"net/http"
 	goruntime "runtime"
 
+	"github.com/hg-dendi/sandboxmatrix/internal/agent/a2a"
+	"github.com/hg-dendi/sandboxmatrix/internal/aggregation"
 	"github.com/hg-dendi/sandboxmatrix/internal/controller"
 	"github.com/hg-dendi/sandboxmatrix/internal/runtime"
+	"github.com/hg-dendi/sandboxmatrix/internal/sharding"
 	v1alpha1 "github.com/hg-dendi/sandboxmatrix/pkg/api/v1alpha1"
 )
 
@@ -28,6 +31,12 @@ func jsonResponse(w http.ResponseWriter, status int, payload any) {
 	_ = json.NewEncoder(w).Encode(payload)
 }
 
+// maxRequestBodySize is the maximum allowed request body size (1 MB).
+const maxRequestBodySize = 1 << 20
+
+// maxExecOutputSize is the maximum buffered exec output size (10 MB).
+const maxExecOutputSize = 10 << 20
+
 // decodeJSON decodes a JSON request body into dst.
 // Returns false and writes an error response if decoding fails.
 func decodeJSON(w http.ResponseWriter, r *http.Request, dst any) bool {
@@ -35,11 +44,29 @@ func decodeJSON(w http.ResponseWriter, r *http.Request, dst any) bool {
 		errorResponse(w, http.StatusBadRequest, "request body is required")
 		return false
 	}
+	r.Body = http.MaxBytesReader(w, r.Body, maxRequestBodySize)
 	if err := json.NewDecoder(r.Body).Decode(dst); err != nil {
 		errorResponse(w, http.StatusBadRequest, fmt.Sprintf("invalid JSON: %v", err))
 		return false
 	}
 	return true
+}
+
+// limitedWriter wraps a bytes.Buffer with a maximum size.
+type limitedWriter struct {
+	buf   bytes.Buffer
+	limit int
+}
+
+func (w *limitedWriter) Write(p []byte) (int, error) {
+	remaining := w.limit - w.buf.Len()
+	if remaining <= 0 {
+		return len(p), nil // discard silently
+	}
+	if len(p) > remaining {
+		p = p[:remaining]
+	}
+	return w.buf.Write(p)
 }
 
 // --------------------------------------------------------------------
@@ -99,7 +126,7 @@ func handleCreateSandbox(ctrl *controller.Controller) http.HandlerFunc {
 			WorkspaceDir:  req.Workspace,
 		})
 		if err != nil {
-			errorResponse(w, http.StatusInternalServerError, err.Error())
+			errorResponse(w, http.StatusInternalServerError, "failed to create sandbox")
 			return
 		}
 		jsonResponse(w, http.StatusCreated, sb)
@@ -208,21 +235,22 @@ func handleExecSandbox(ctrl *controller.Controller) http.HandlerFunc {
 			return
 		}
 
-		var stdout, stderr bytes.Buffer
+		stdout := &limitedWriter{limit: maxExecOutputSize}
+		stderr := &limitedWriter{limit: maxExecOutputSize}
 		result, err := ctrl.Exec(r.Context(), name, &runtime.ExecConfig{
 			Cmd:    req.Command,
-			Stdout: &stdout,
-			Stderr: &stderr,
+			Stdout: stdout,
+			Stderr: stderr,
 		})
 		if err != nil {
-			errorResponse(w, http.StatusInternalServerError, err.Error())
+			errorResponse(w, http.StatusInternalServerError, "exec failed")
 			return
 		}
 
 		jsonResponse(w, http.StatusOK, execResponse{
 			ExitCode: result.ExitCode,
-			Stdout:   stdout.String(),
-			Stderr:   stderr.String(),
+			Stdout:   stdout.buf.String(),
+			Stderr:   stderr.buf.String(),
 		})
 	}
 }
@@ -411,6 +439,130 @@ func handleDestroyMatrix(ctrl *controller.Controller) http.HandlerFunc {
 }
 
 // --------------------------------------------------------------------
+// Matrix task sharding / result aggregation handlers
+// --------------------------------------------------------------------
+
+type shardTaskRequest struct {
+	Tasks    []sharding.Task `json:"tasks"`
+	Strategy string          `json:"strategy,omitempty"` // round-robin, hash, balanced
+}
+
+func handleShardTask(ctrl *controller.Controller, gateway *a2a.Gateway) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		name := r.PathValue("name")
+		if name == "" {
+			errorResponse(w, http.StatusBadRequest, "matrix name is required")
+			return
+		}
+
+		var req shardTaskRequest
+		if !decodeJSON(w, r, &req) {
+			return
+		}
+		if len(req.Tasks) == 0 {
+			errorResponse(w, http.StatusBadRequest, "tasks is required")
+			return
+		}
+
+		mx, err := ctrl.GetMatrix(name)
+		if err != nil {
+			errorResponse(w, http.StatusNotFound, err.Error())
+			return
+		}
+
+		cfg := mx.Sharding
+		if req.Strategy != "" {
+			cfg = &v1alpha1.ShardingConfig{Strategy: req.Strategy}
+		}
+		strategy := sharding.NewStrategy(cfg)
+		assignments := strategy.Distribute(req.Tasks, mx.Members)
+
+		// Send assignments via A2A if gateway is available.
+		if gateway != nil {
+			for _, a := range assignments {
+				sandboxName := name + "-" + a.MemberName
+				payload, _ := json.Marshal(a.Task)
+				_ = gateway.Send(r.Context(), &a2a.Message{
+					From:    name + "-coordinator",
+					To:      sandboxName,
+					Type:    "task-assignment",
+					Payload: string(payload),
+				})
+			}
+		}
+
+		jsonResponse(w, http.StatusOK, map[string]interface{}{
+			"totalTasks":  len(req.Tasks),
+			"assignments": assignments,
+			"strategy":    req.Strategy,
+		})
+	}
+}
+
+type collectResultsRequest struct {
+	TaskID     string `json:"taskID"`
+	Strategy   string `json:"strategy,omitempty"` // collect-all, first-success, majority
+	TimeoutSec int    `json:"timeoutSec,omitempty"`
+}
+
+func handleCollectResults(ctrl *controller.Controller, gateway *a2a.Gateway) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		name := r.PathValue("name")
+		if name == "" {
+			errorResponse(w, http.StatusBadRequest, "matrix name is required")
+			return
+		}
+
+		var req collectResultsRequest
+		if !decodeJSON(w, r, &req) {
+			return
+		}
+		if req.TaskID == "" {
+			errorResponse(w, http.StatusBadRequest, "taskID is required")
+			return
+		}
+
+		mx, err := ctrl.GetMatrix(name)
+		if err != nil {
+			errorResponse(w, http.StatusNotFound, err.Error())
+			return
+		}
+
+		if gateway == nil {
+			errorResponse(w, http.StatusServiceUnavailable, "A2A gateway not configured")
+			return
+		}
+
+		timeoutSec := req.TimeoutSec
+		if timeoutSec <= 0 {
+			timeoutSec = 60
+		}
+		// Copy the config to avoid mutating the stored matrix.
+		aggCfg := &v1alpha1.AggregationConfig{Strategy: "collect-all", TimeoutSec: timeoutSec}
+		if mx.Aggregation != nil {
+			*aggCfg = *mx.Aggregation
+		}
+		if req.Strategy != "" {
+			aggCfg.Strategy = req.Strategy
+		}
+		if req.TimeoutSec > 0 {
+			aggCfg.TimeoutSec = timeoutSec
+		} else if aggCfg.TimeoutSec == 0 {
+			aggCfg.TimeoutSec = 60
+		}
+
+		collector := aggregation.NewCollector(gateway)
+		result, err := collector.Collect(r.Context(), name+"-coordinator", req.TaskID, len(mx.Members), aggCfg)
+		if err != nil {
+			errorResponse(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+
+		jsonResponse(w, http.StatusOK, result)
+	}
+}
+
+// --------------------------------------------------------------------
 // Session handlers
 // --------------------------------------------------------------------
 
@@ -485,21 +637,22 @@ func handleExecInSession(ctrl *controller.Controller) http.HandlerFunc {
 			return
 		}
 
-		var stdout, stderr bytes.Buffer
+		stdout := &limitedWriter{limit: maxExecOutputSize}
+		stderr := &limitedWriter{limit: maxExecOutputSize}
 		result, err := ctrl.ExecInSession(r.Context(), id, &runtime.ExecConfig{
 			Cmd:    req.Command,
-			Stdout: &stdout,
-			Stderr: &stderr,
+			Stdout: stdout,
+			Stderr: stderr,
 		})
 		if err != nil {
-			errorResponse(w, http.StatusInternalServerError, err.Error())
+			errorResponse(w, http.StatusInternalServerError, "exec failed")
 			return
 		}
 
 		jsonResponse(w, http.StatusOK, execResponse{
 			ExitCode: result.ExitCode,
-			Stdout:   stdout.String(),
-			Stderr:   stderr.String(),
+			Stdout:   stdout.buf.String(),
+			Stderr:   stderr.buf.String(),
 		})
 	}
 }

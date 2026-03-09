@@ -3,6 +3,7 @@ package auth
 
 import (
 	"crypto/rand"
+	"crypto/subtle"
 	"encoding/hex"
 	"fmt"
 	"sync"
@@ -151,7 +152,7 @@ func (r *RBAC) AuthorizeByToken(token, resource, action string) (string, error) 
 
 	var user *v1alpha1.User
 	for _, u := range r.users {
-		if u.Token == token {
+		if subtle.ConstantTimeCompare([]byte(u.Token), []byte(token)) == 1 {
 			user = u
 			break
 		}

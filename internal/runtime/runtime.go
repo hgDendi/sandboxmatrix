@@ -19,6 +19,13 @@ type GPUConfig struct {
 	Driver string // "nvidia"
 }
 
+// DeviceMapping represents a host device to pass through to a container.
+type DeviceMapping struct {
+	HostPath      string // e.g. /dev/kvm
+	ContainerPath string // defaults to HostPath
+	Permissions   string // "rwm", "rw", "r"
+}
+
 // CreateConfig holds configuration for creating a new sandbox runtime.
 type CreateConfig struct {
 	Name    string
@@ -27,6 +34,7 @@ type CreateConfig struct {
 	Memory  string
 	Disk    string
 	GPU     *GPUConfig
+	Devices []DeviceMapping
 	Mounts  []Mount
 	Ports   []PortMapping
 	Env     map[string]string

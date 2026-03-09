@@ -186,8 +186,14 @@ func newSandboxInspectCmdLazy(ctrl **controller.Controller) *cobra.Command {
 			if sb.Status.StartedAt != nil {
 				fmt.Printf("Started:    %s\n", sb.Status.StartedAt.Format(time.RFC3339))
 			}
+			if sb.Status.ReadyAt != nil {
+				fmt.Printf("Ready:      %s\n", sb.Status.ReadyAt.Format(time.RFC3339))
+			}
 			if sb.Status.StoppedAt != nil {
 				fmt.Printf("Stopped:    %s\n", sb.Status.StoppedAt.Format(time.RFC3339))
+			}
+			if sb.Status.ProbeError != "" {
+				fmt.Printf("ProbeError: %s\n", sb.Status.ProbeError)
 			}
 			if sb.Spec.Workspace.Source != "" {
 				fmt.Printf("Workspace:  %s -> %s\n", sb.Spec.Workspace.Source, sb.Spec.Workspace.MountPath)

@@ -11,6 +11,9 @@ import (
 )
 
 // mapContainerState maps Docker container state strings to the SandboxState enum.
+// Note: The "Ready" state is a higher-level concept (set after readiness probe passes).
+// When a container reports "running", we use Running here. Callers that already
+// have a sandbox in Ready state should preserve that state rather than overwriting.
 func mapContainerState(dockerState string) v1alpha1.SandboxState {
 	switch dockerState {
 	case "running":

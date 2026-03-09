@@ -2,6 +2,7 @@
 package web
 
 import (
+	"bytes"
 	"context"
 	"embed"
 	"encoding/json"
@@ -11,12 +12,19 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gorilla/websocket"
 	"github.com/hg-dendi/sandboxmatrix/internal/controller"
+	"github.com/hg-dendi/sandboxmatrix/internal/runtime"
 	v1alpha1 "github.com/hg-dendi/sandboxmatrix/pkg/api/v1alpha1"
 )
 
 //go:embed static/*
 var staticFS embed.FS
+
+// dashUpgrader upgrades HTTP connections to WebSocket for the terminal endpoint.
+var dashUpgrader = websocket.Upgrader{
+	CheckOrigin: func(_ *http.Request) bool { return true },
+}
 
 // Dashboard serves the embedded web UI and dashboard API endpoints.
 type Dashboard struct {
@@ -32,25 +40,30 @@ func NewDashboard(ctrl *controller.Controller, addr string) *Dashboard {
 
 // sandboxJSON is the JSON representation of a sandbox for the dashboard API.
 type sandboxJSON struct {
-	Name      string             `json:"name"`
-	State     string             `json:"state"`
-	Blueprint string             `json:"blueprint"`
-	RuntimeID string             `json:"runtimeID"`
-	IP        string             `json:"ip,omitempty"`
-	CreatedAt time.Time          `json:"createdAt"`
-	StartedAt *time.Time         `json:"startedAt,omitempty"`
-	StoppedAt *time.Time         `json:"stoppedAt,omitempty"`
-	Message   string             `json:"message,omitempty"`
-	Labels    map[string]string  `json:"labels,omitempty"`
-	Resources v1alpha1.Resources `json:"resources,omitempty"`
+	Name       string             `json:"name"`
+	State      string             `json:"state"`
+	Blueprint  string             `json:"blueprint"`
+	RuntimeID  string             `json:"runtimeID"`
+	IP         string             `json:"ip,omitempty"`
+	CreatedAt  time.Time          `json:"createdAt"`
+	StartedAt  *time.Time         `json:"startedAt,omitempty"`
+	ReadyAt    *time.Time         `json:"readyAt,omitempty"`
+	StoppedAt  *time.Time         `json:"stoppedAt,omitempty"`
+	Message    string             `json:"message,omitempty"`
+	ProbeError string             `json:"probeError,omitempty"`
+	Labels     map[string]string  `json:"labels,omitempty"`
+	Resources  v1alpha1.Resources `json:"resources,omitempty"`
 }
 
 // matrixJSON is the JSON representation of a matrix for the dashboard API.
 type matrixJSON struct {
-	Name      string                  `json:"name"`
-	State     string                  `json:"state"`
-	Members   []v1alpha1.MatrixMember `json:"members"`
-	CreatedAt time.Time               `json:"createdAt"`
+	Name        string                      `json:"name"`
+	State       string                      `json:"state"`
+	Members     []v1alpha1.MatrixMember     `json:"members"`
+	CreatedAt   time.Time                   `json:"createdAt"`
+	Sharding    *v1alpha1.ShardingConfig    `json:"sharding,omitempty"`
+	Aggregation *v1alpha1.AggregationConfig `json:"aggregation,omitempty"`
+	Results     []v1alpha1.TaskResult       `json:"results,omitempty"`
 }
 
 // sessionJSON is the JSON representation of a session for the dashboard API.
@@ -96,10 +109,16 @@ func (d *Dashboard) Start() error {
 	mux.HandleFunc("POST /api/dashboard/sandboxes/{name}/stop", d.handleStopSandbox)
 	mux.HandleFunc("POST /api/dashboard/sandboxes/{name}/start", d.handleStartSandbox)
 	mux.HandleFunc("DELETE /api/dashboard/sandboxes/{name}", d.handleDestroySandbox)
+	mux.HandleFunc("GET /api/dashboard/sandboxes/{name}/exec", d.handleExecWS)
+	mux.HandleFunc("POST /api/dashboard/sandboxes/{name}/exec", d.handleExecREST)
 
 	d.server = &http.Server{
-		Addr:    d.addr,
-		Handler: mux,
+		Addr:              d.addr,
+		Handler:           mux,
+		ReadTimeout:       30 * time.Second,
+		ReadHeaderTimeout: 10 * time.Second,
+		WriteTimeout:      60 * time.Second,
+		IdleTimeout:       120 * time.Second,
 	}
 
 	go func() {
@@ -129,17 +148,19 @@ func (d *Dashboard) handleListSandboxes(w http.ResponseWriter, r *http.Request) 
 	result := make([]sandboxJSON, 0, len(sandboxes))
 	for _, sb := range sandboxes {
 		result = append(result, sandboxJSON{
-			Name:      sb.Metadata.Name,
-			State:     string(sb.Status.State),
-			Blueprint: sb.Spec.BlueprintRef,
-			RuntimeID: truncateID(sb.Status.RuntimeID),
-			IP:        sb.Status.IP,
-			CreatedAt: sb.Metadata.CreatedAt,
-			StartedAt: sb.Status.StartedAt,
-			StoppedAt: sb.Status.StoppedAt,
-			Message:   sb.Status.Message,
-			Labels:    sb.Metadata.Labels,
-			Resources: sb.Spec.Resources,
+			Name:       sb.Metadata.Name,
+			State:      string(sb.Status.State),
+			Blueprint:  sb.Spec.BlueprintRef,
+			RuntimeID:  truncateID(sb.Status.RuntimeID),
+			IP:         sb.Status.IP,
+			CreatedAt:  sb.Metadata.CreatedAt,
+			StartedAt:  sb.Status.StartedAt,
+			ReadyAt:    sb.Status.ReadyAt,
+			StoppedAt:  sb.Status.StoppedAt,
+			Message:    sb.Status.Message,
+			ProbeError: sb.Status.ProbeError,
+			Labels:     sb.Metadata.Labels,
+			Resources:  sb.Spec.Resources,
 		})
 	}
 
@@ -161,10 +182,13 @@ func (d *Dashboard) handleListMatrices(w http.ResponseWriter, r *http.Request) {
 	result := make([]matrixJSON, 0, len(matrices))
 	for _, mx := range matrices {
 		result = append(result, matrixJSON{
-			Name:      mx.Metadata.Name,
-			State:     string(mx.State),
-			Members:   mx.Members,
-			CreatedAt: mx.Metadata.CreatedAt,
+			Name:        mx.Metadata.Name,
+			State:       string(mx.State),
+			Members:     mx.Members,
+			CreatedAt:   mx.Metadata.CreatedAt,
+			Sharding:    mx.Sharding,
+			Aggregation: mx.Aggregation,
+			Results:     mx.Results,
 		})
 	}
 
@@ -241,6 +265,91 @@ func (d *Dashboard) handleDestroySandbox(w http.ResponseWriter, r *http.Request)
 	}
 
 	writeJSON(w, http.StatusOK, map[string]string{"status": "destroyed", "name": name})
+}
+
+func (d *Dashboard) handleExecWS(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	if name == "" {
+		http.Error(w, "sandbox name required", http.StatusBadRequest)
+		return
+	}
+
+	conn, err := dashUpgrader.Upgrade(w, r, nil)
+	if err != nil {
+		return
+	}
+	defer conn.Close()
+
+	// Read command from first message.
+	var req struct {
+		Command string `json:"command"`
+	}
+	if err := conn.ReadJSON(&req); err != nil {
+		_ = conn.WriteJSON(map[string]string{"type": "error", "data": err.Error()})
+		return
+	}
+	if req.Command == "" {
+		_ = conn.WriteJSON(map[string]string{"type": "error", "data": "command is required"})
+		return
+	}
+
+	// Execute command.
+	var stdout, stderr bytes.Buffer
+	result, execErr := d.ctrl.Exec(r.Context(), name, &runtime.ExecConfig{
+		Cmd:    []string{"sh", "-c", req.Command},
+		Stdout: &stdout,
+		Stderr: &stderr,
+	})
+
+	if execErr != nil {
+		_ = conn.WriteJSON(map[string]string{"type": "error", "data": execErr.Error()})
+		return
+	}
+
+	if out := stdout.String(); out != "" {
+		_ = conn.WriteJSON(map[string]string{"type": "stdout", "data": out})
+	}
+	if errOut := stderr.String(); errOut != "" {
+		_ = conn.WriteJSON(map[string]string{"type": "stderr", "data": errOut})
+	}
+	_ = conn.WriteJSON(map[string]any{"type": "exit", "exitCode": result.ExitCode})
+}
+
+func (d *Dashboard) handleExecREST(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	if name == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "sandbox name required"})
+		return
+	}
+
+	var req struct {
+		Command string `json:"command"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request"})
+		return
+	}
+	if req.Command == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "command is required"})
+		return
+	}
+
+	var stdout, stderr bytes.Buffer
+	result, err := d.ctrl.Exec(r.Context(), name, &runtime.ExecConfig{
+		Cmd:    []string{"sh", "-c", req.Command},
+		Stdout: &stdout,
+		Stderr: &stderr,
+	})
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"exitCode": result.ExitCode,
+		"stdout":   stdout.String(),
+		"stderr":   stderr.String(),
+	})
 }
 
 // writeJSON writes a JSON response with the given status code.

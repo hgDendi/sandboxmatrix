@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
@@ -52,14 +53,14 @@ func newDashboardCmd() *cobra.Command {
 				return fmt.Errorf("start dashboard: %w", err)
 			}
 
-			fmt.Printf("sandboxMatrix dashboard running at http://localhost%s\n", addr)
+			slog.Info("sandboxMatrix dashboard running", "addr", addr)
 
 			// Wait for interrupt signal.
 			sigCh := make(chan os.Signal, 1)
 			signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
 			<-sigCh
 
-			fmt.Println("\nShutting down dashboard...")
+			slog.Info("shutting down dashboard")
 			ctx, cancel := context.WithTimeout(context.Background(), 5e9) // 5 seconds
 			defer cancel()
 			return dash.Shutdown(ctx)

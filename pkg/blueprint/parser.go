@@ -51,6 +51,9 @@ func Validate(bp *v1alpha1.Blueprint) []error {
 	if bp.Spec.Runtime == "" {
 		errs = append(errs, fmt.Errorf("spec.runtime is required"))
 	}
+	if bp.Spec.Runtime == "firecracker" {
+		errs = append(errs, fmt.Errorf("spec.runtime: firecracker is a stub and not yet implemented; use docker or gvisor"))
+	}
 
 	// GPU validation.
 	if bp.Spec.Resources.GPU != nil {
@@ -59,6 +62,35 @@ func Validate(bp *v1alpha1.Blueprint) []error {
 		}
 		if bp.Spec.Resources.GPU.Driver == "" {
 			bp.Spec.Resources.GPU.Driver = "nvidia"
+		}
+	}
+
+	// Device validation.
+	for i, d := range bp.Spec.Devices {
+		if d.HostPath == "" {
+			errs = append(errs, fmt.Errorf("spec.devices[%d].hostPath is required", i))
+		}
+	}
+
+	// Readiness probe validation.
+	if p := bp.Spec.ReadinessProbe; p != nil {
+		switch p.Type {
+		case "exec":
+			if len(p.Command) == 0 {
+				errs = append(errs, fmt.Errorf("spec.readinessProbe: exec probe requires a command"))
+			}
+		case "http":
+			if p.Port == 0 {
+				errs = append(errs, fmt.Errorf("spec.readinessProbe: http probe requires a port"))
+			}
+		case "tcp":
+			if p.Port == 0 {
+				errs = append(errs, fmt.Errorf("spec.readinessProbe: tcp probe requires a port"))
+			}
+		case "":
+			errs = append(errs, fmt.Errorf("spec.readinessProbe.type is required"))
+		default:
+			errs = append(errs, fmt.Errorf("spec.readinessProbe.type must be exec, http, or tcp"))
 		}
 	}
 

@@ -44,6 +44,23 @@ const client = new SandboxMatrixClient({
 });
 ```
 
+## HTTP Client (REST API)
+
+For direct API access without the CLI binary:
+
+```typescript
+import { HTTPClient } from "@sandboxmatrix/sdk";
+
+const client = new HTTPClient({ baseURL: "http://localhost:8080", token: "your-token" });
+
+// List sandboxes
+const sandboxes = await client.listSandboxes();
+
+// Execute command
+const result = await client.exec("my-sandbox", "echo hello");
+console.log(result.stdout);
+```
+
 ## API Reference
 
 ### Sandbox Operations

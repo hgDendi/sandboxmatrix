@@ -2,9 +2,12 @@
 package server
 
 import (
-	"fmt"
+	"log/slog"
 	"net/http"
+	"strconv"
 	"time"
+
+	"github.com/hg-dendi/sandboxmatrix/internal/observability"
 )
 
 // corsMiddleware adds CORS headers to every response so that web dashboards
@@ -36,20 +39,25 @@ func jsonContentTypeMiddleware(next http.Handler) http.Handler {
 }
 
 // loggingMiddleware logs each incoming request with method, path, status, and
-// duration using simple fmt.Printf output.
+// duration using structured logging (slog) and records Prometheus metrics.
 func loggingMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 		lrw := &loggingResponseWriter{ResponseWriter: w, statusCode: http.StatusOK}
 		next.ServeHTTP(lrw, r)
 		duration := time.Since(start)
-		fmt.Printf("[%s] %s %s %d %s\n",
-			start.Format("2006-01-02 15:04:05"),
-			r.Method,
-			r.URL.Path,
-			lrw.statusCode,
-			duration,
+
+		slog.Info("http request",
+			"method", r.Method,
+			"path", r.URL.Path,
+			"status", lrw.statusCode,
+			"duration", duration,
+			"remote", r.RemoteAddr,
 		)
+
+		statusStr := strconv.Itoa(lrw.statusCode)
+		observability.Metrics.HTTPRequestsTotal.WithLabelValues(r.Method, r.URL.Path, statusStr).Inc()
+		observability.Metrics.HTTPRequestDuration.WithLabelValues(r.Method, r.URL.Path).Observe(duration.Seconds())
 	})
 }
 

@@ -154,6 +154,8 @@ func (c *Controller) DestroyMatrix(ctx context.Context, name string) error {
 		return err
 	}
 
+	// Destroy all members, continuing even if some fail, to avoid leaving
+	// the matrix in an irrecoverable half-destroyed state.
 	var firstErr error
 	for _, member := range mx.Members {
 		sandboxName := name + "-" + member.Name
@@ -163,15 +165,15 @@ func (c *Controller) DestroyMatrix(ctx context.Context, name string) error {
 			}
 		}
 	}
-	if firstErr != nil {
-		return firstErr
-	}
 
-	// Best-effort: remove the isolated matrix network.
+	// Always clean up the network and matrix record regardless of member errors.
 	netName := matrixNetworkName(name)
 	_ = c.runtime.DeleteNetwork(ctx, netName)
 
-	return c.matrices.Delete(name)
+	if delErr := c.matrices.Delete(name); delErr != nil && firstErr == nil {
+		firstErr = delErr
+	}
+	return firstErr
 }
 
 // GetMatrix returns a matrix by name.

@@ -1,0 +1,29 @@
+apiVersion: smx/v1alpha1
+kind: Blueprint
+metadata:
+  name: android-emulator
+  version: "1.0.0"
+spec:
+  base: budtmo/docker-android:emulator_14.0
+  runtime: docker
+  resources:
+    cpu: "4"
+    memory: 8Gi
+    disk: 20Gi
+  devices:
+    - hostPath: /dev/kvm
+      permissions: "rw"
+    - hostPath: /dev/dri
+      permissions: "rw"
+      optional: true
+  readinessProbe:
+    type: exec
+    command: ["adb", "shell", "getprop", "sys.boot_completed"]
+    initialDelaySec: 10
+    periodSec: 3
+    timeoutSec: 5
+    successThreshold: 1
+    failureThreshold: 40
+  network:
+    policy: bridge
+    expose: [5554, 5555, 6080]

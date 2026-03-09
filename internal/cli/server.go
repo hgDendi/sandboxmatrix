@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
@@ -79,13 +80,13 @@ through this server instead of subprocess CLI calls.`,
 			case err := <-errCh:
 				return err
 			case sig := <-sigCh:
-				fmt.Printf("\nReceived signal %v, shutting down...\n", sig)
+				slog.Info("received signal, shutting down", "signal", sig)
 				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 				defer cancel()
 				if err := srv.Shutdown(ctx); err != nil {
 					return fmt.Errorf("shutdown: %w", err)
 				}
-				fmt.Println("Server stopped gracefully.")
+				slog.Info("server stopped gracefully")
 				return nil
 			}
 		},

@@ -3,8 +3,10 @@ package controller
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"time"
 
+	"github.com/hg-dendi/sandboxmatrix/internal/observability"
 	"github.com/hg-dendi/sandboxmatrix/internal/runtime"
 	v1alpha1 "github.com/hg-dendi/sandboxmatrix/pkg/api/v1alpha1"
 )
@@ -28,7 +30,7 @@ func (c *Controller) StartSession(ctx context.Context, sandboxName string) (*v1a
 	if err != nil {
 		return nil, fmt.Errorf("sandbox %q not found: %w", sandboxName, err)
 	}
-	if sb.Status.State != v1alpha1.SandboxStateRunning {
+	if sb.Status.State != v1alpha1.SandboxStateRunning && sb.Status.State != v1alpha1.SandboxStateReady {
 		return nil, fmt.Errorf("sandbox %q is not running (state: %s)", sandboxName, sb.Status.State)
 	}
 
@@ -53,6 +55,8 @@ func (c *Controller) StartSession(ctx context.Context, sandboxName string) (*v1a
 		return nil, fmt.Errorf("save session: %w", err)
 	}
 
+	observability.Metrics.SessionsActive.Inc()
+	slog.Info("session started", "id", session.Metadata.Name, "sandbox", sandboxName)
 	return session, nil
 }
 
@@ -76,6 +80,8 @@ func (c *Controller) EndSession(ctx context.Context, sessionID string) error {
 	session.EndedAt = &now
 	session.Metadata.UpdatedAt = now
 
+	observability.Metrics.SessionsActive.Dec()
+	slog.Info("session ended", "id", sessionID)
 	return c.sessions.SaveSession(session)
 }
 

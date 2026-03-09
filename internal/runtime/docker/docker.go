@@ -112,6 +112,13 @@ func (r *Runtime) Create(ctx context.Context, cfg *runtime.CreateConfig) (string
 		hostCfg.Runtime = r.ociRuntime
 	}
 
+	// Container security hardening.
+	hostCfg.SecurityOpt = []string{"no-new-privileges"}
+	hostCfg.CapDrop = []string{"ALL"}
+	hostCfg.CapAdd = []string{"NET_BIND_SERVICE"}
+	pidsLimit := int64(4096)
+	hostCfg.Resources.PidsLimit = &pidsLimit
+
 	// Resource limits.
 	if cfg.Memory != "" {
 		mem, err := parseMemory(cfg.Memory)
@@ -140,6 +147,23 @@ func (r *Runtime) Create(ctx context.Context, cfg *runtime.CreateConfig) (string
 				Capabilities: [][]string{{"gpu"}},
 			},
 		}
+	}
+
+	// Device passthrough (e.g., /dev/kvm, /dev/dri).
+	for _, d := range cfg.Devices {
+		cPath := d.ContainerPath
+		if cPath == "" {
+			cPath = d.HostPath
+		}
+		perms := d.Permissions
+		if perms == "" {
+			perms = "rwm"
+		}
+		hostCfg.Devices = append(hostCfg.Devices, container.DeviceMapping{
+			PathOnHost:        d.HostPath,
+			PathInContainer:   cPath,
+			CgroupPermissions: perms,
+		})
 	}
 
 	// Mounts.
@@ -250,7 +274,7 @@ func (r *Runtime) Info(ctx context.Context, id string) (runtime.Info, error) {
 		return runtime.Info{}, fmt.Errorf("inspect container: %w", err)
 	}
 	info := runtime.Info{
-		ID:     cj.ID[:12],
+		ID:     safePrefix(cj.ID, 12),
 		Name:   strings.TrimPrefix(cj.Name, "/"),
 		Image:  cj.Config.Image,
 		State:  cj.State.Status,
@@ -316,7 +340,7 @@ func (r *Runtime) List(ctx context.Context) ([]runtime.Info, error) {
 			name = strings.TrimPrefix(containers[i].Names[0], "/")
 		}
 		infos = append(infos, runtime.Info{
-			ID:     containers[i].ID[:12],
+			ID:     safePrefix(containers[i].ID, 12),
 			Name:   name,
 			Image:  containers[i].Image,
 			State:  containers[i].State,
@@ -474,6 +498,14 @@ func formatBind(m runtime.Mount) string {
 		bind += ":ro"
 	}
 	return bind
+}
+
+// safePrefix returns at most the first n characters of s.
+func safePrefix(s string, n int) string {
+	if len(s) > n {
+		return s[:n]
+	}
+	return s
 }
 
 // parseMemory converts strings like "2Gi", "512Mi" to bytes.

@@ -31,7 +31,10 @@ func NewFromConfig(cfg StoreConfig) (Store, error) {
 }
 
 // NewSessionStoreFromConfig creates a SessionStore based on configuration.
-func NewSessionStoreFromConfig(cfg StoreConfig) (SessionStore, error) {
+// When using the "bolt" backend, pass the Store returned by NewFromConfig as
+// existingStore to reuse the same BoltDB handle (BoltDB uses exclusive file
+// locking, so opening the same file twice would deadlock).
+func NewSessionStoreFromConfig(cfg StoreConfig, existingStore ...Store) (SessionStore, error) {
 	switch cfg.Backend {
 	case "file", "":
 		if cfg.FilePath != "" {
@@ -39,6 +42,12 @@ func NewSessionStoreFromConfig(cfg StoreConfig) (SessionStore, error) {
 		}
 		return NewFileSessionStore()
 	case "bolt":
+		// Reuse the existing BoltStore if provided to avoid double-open deadlock.
+		for _, s := range existingStore {
+			if bs, ok := s.(SessionStore); ok {
+				return bs, nil
+			}
+		}
 		if cfg.BoltPath != "" {
 			return NewBoltStoreWithPath(cfg.BoltPath)
 		}

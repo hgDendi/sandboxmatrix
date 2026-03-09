@@ -11,8 +11,11 @@ import (
 	"time"
 
 	"github.com/hg-dendi/sandboxmatrix/internal/agent/a2a"
+	"github.com/hg-dendi/sandboxmatrix/internal/aggregation"
 	"github.com/hg-dendi/sandboxmatrix/internal/controller"
 	"github.com/hg-dendi/sandboxmatrix/internal/runtime"
+	"github.com/hg-dendi/sandboxmatrix/internal/sharding"
+	v1alpha1 "github.com/hg-dendi/sandboxmatrix/pkg/api/v1alpha1"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 )
@@ -188,6 +191,59 @@ func (s *Server) registerTools() {
 			),
 		),
 		s.handleA2ABroadcast,
+	)
+
+	// matrix_shard_task
+	s.mcpServer.AddTool(
+		mcp.NewTool("matrix_shard_task",
+			mcp.WithDescription("Distribute tasks across matrix members using a sharding strategy"),
+			mcp.WithString("matrix",
+				mcp.Required(),
+				mcp.Description("Name of the matrix to shard tasks across"),
+			),
+			mcp.WithString("tasks",
+				mcp.Required(),
+				mcp.Description("JSON array of tasks: [{\"id\":\"t1\",\"payload\":\"...\"}]"),
+			),
+			mcp.WithString("strategy",
+				mcp.Description("Sharding strategy: round-robin (default), hash, balanced"),
+			),
+		),
+		s.handleMatrixShardTask,
+	)
+
+	// matrix_collect_results
+	s.mcpServer.AddTool(
+		mcp.NewTool("matrix_collect_results",
+			mcp.WithDescription("Collect task results from matrix members via A2A messages"),
+			mcp.WithString("matrix",
+				mcp.Required(),
+				mcp.Description("Name of the matrix to collect results from"),
+			),
+			mcp.WithString("task_id",
+				mcp.Required(),
+				mcp.Description("Task ID to collect results for"),
+			),
+			mcp.WithString("timeout",
+				mcp.Description("Timeout in seconds (default: 60)"),
+			),
+		),
+		s.handleMatrixCollectResults,
+	)
+
+	// sandbox_ready_wait
+	s.mcpServer.AddTool(
+		mcp.NewTool("sandbox_ready_wait",
+			mcp.WithDescription("Wait for a sandbox to pass its readiness probe"),
+			mcp.WithString("name",
+				mcp.Required(),
+				mcp.Description("Name of the sandbox to wait for"),
+			),
+			mcp.WithString("timeout",
+				mcp.Description("Timeout in seconds (default: 60)"),
+			),
+		),
+		s.handleSandboxReadyWait,
 	)
 }
 
@@ -448,4 +504,153 @@ func (s *Server) handleA2ABroadcast(ctx context.Context, request mcp.CallToolReq
 	}
 
 	return mcp.NewToolResultText(fmt.Sprintf("Broadcast from %q to %d targets (type: %s).", from, len(targets), msgType)), nil
+}
+
+// --- Matrix orchestration tool handlers ---
+
+func (s *Server) handleMatrixShardTask(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) { //nolint:gocritic // hugeParam
+	args := request.GetArguments()
+
+	matrixName, _ := args["matrix"].(string)
+	if matrixName == "" {
+		return mcp.NewToolResultError("parameter 'matrix' is required"), nil
+	}
+
+	tasksJSON, _ := args["tasks"].(string)
+	if tasksJSON == "" {
+		return mcp.NewToolResultError("parameter 'tasks' is required"), nil
+	}
+
+	strategyName, _ := args["strategy"].(string)
+
+	// Get matrix to find members.
+	mx, err := s.ctrl.GetMatrix(matrixName)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("failed to get matrix: %v", err)), nil
+	}
+
+	// Parse tasks.
+	var tasks []sharding.Task
+	if err := json.Unmarshal([]byte(tasksJSON), &tasks); err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("failed to parse tasks JSON: %v", err)), nil
+	}
+
+	// Create strategy and distribute.
+	cfg := mx.Sharding
+	if strategyName != "" {
+		cfg = &v1alpha1.ShardingConfig{Strategy: strategyName}
+	}
+	strategy := sharding.NewStrategy(cfg)
+	assignments := strategy.Distribute(tasks, mx.Members)
+
+	// Send each assignment via A2A.
+	for _, a := range assignments {
+		sandboxName := matrixName + "-" + a.MemberName
+		payload, _ := json.Marshal(a.Task)
+		msg := &a2a.Message{
+			From:    matrixName + "-coordinator",
+			To:      sandboxName,
+			Type:    "task-assignment",
+			Payload: string(payload),
+		}
+		_ = s.gateway.Send(ctx, msg)
+	}
+
+	result := map[string]interface{}{
+		"totalTasks":   len(tasks),
+		"totalMembers": len(mx.Members),
+		"assignments":  len(assignments),
+		"strategy":     strategyName,
+	}
+	data, _ := json.Marshal(result)
+	return mcp.NewToolResultText(string(data)), nil
+}
+
+func (s *Server) handleMatrixCollectResults(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) { //nolint:gocritic // hugeParam
+	args := request.GetArguments()
+
+	matrixName, _ := args["matrix"].(string)
+	if matrixName == "" {
+		return mcp.NewToolResultError("parameter 'matrix' is required"), nil
+	}
+
+	taskID, _ := args["task_id"].(string)
+	if taskID == "" {
+		return mcp.NewToolResultError("parameter 'task_id' is required"), nil
+	}
+
+	// Get matrix to determine expected member count.
+	mx, err := s.ctrl.GetMatrix(matrixName)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("failed to get matrix: %v", err)), nil
+	}
+
+	// Parse optional timeout.
+	timeoutSec := 60
+	if t, ok := args["timeout"].(string); ok && t != "" {
+		fmt.Sscanf(t, "%d", &timeoutSec)
+	}
+
+	// Copy config to avoid mutating the stored matrix.
+	aggCfg := &v1alpha1.AggregationConfig{Strategy: "collect-all", TimeoutSec: timeoutSec}
+	if mx.Aggregation != nil {
+		*aggCfg = *mx.Aggregation
+	}
+	if aggCfg.TimeoutSec == 0 {
+		aggCfg.TimeoutSec = timeoutSec
+	}
+
+	collector := aggregation.NewCollector(s.gateway)
+	coordinatorName := matrixName + "-coordinator"
+	result, err := collector.Collect(ctx, coordinatorName, taskID, len(mx.Members), aggCfg)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("collection error: %v", err)), nil
+	}
+
+	data, _ := json.Marshal(result)
+	return mcp.NewToolResultText(string(data)), nil
+}
+
+func (s *Server) handleSandboxReadyWait(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) { //nolint:gocritic // hugeParam
+	args := request.GetArguments()
+
+	name, _ := args["name"].(string)
+	if name == "" {
+		return mcp.NewToolResultError("parameter 'name' is required"), nil
+	}
+
+	timeoutSec := 60
+	if t, ok := args["timeout"].(string); ok && t != "" {
+		fmt.Sscanf(t, "%d", &timeoutSec)
+	}
+
+	// Poll sandbox state until Ready or timeout using a ticker.
+	deadline := time.After(time.Duration(timeoutSec) * time.Second)
+	ticker := time.NewTicker(1 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return mcp.NewToolResultError("context cancelled"), nil
+		case <-deadline:
+			return mcp.NewToolResultError(fmt.Sprintf("sandbox %q did not become ready within %ds", name, timeoutSec)), nil
+		case <-ticker.C:
+			sb, err := s.ctrl.Get(name)
+			if err != nil {
+				return mcp.NewToolResultError(fmt.Sprintf("failed to get sandbox: %v", err)), nil
+			}
+
+			if sb.Status.State == v1alpha1.SandboxStateReady {
+				return mcp.NewToolResultText(fmt.Sprintf("Sandbox %q is ready.", name)), nil
+			}
+			if sb.Status.State == v1alpha1.SandboxStateError {
+				msg := sb.Status.Message
+				if sb.Status.ProbeError != "" {
+					msg = sb.Status.ProbeError
+				}
+				return mcp.NewToolResultError(fmt.Sprintf("sandbox %q is in error state: %s", name, msg)), nil
+			}
+		}
+	}
 }
