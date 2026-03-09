@@ -25,14 +25,14 @@ type wsExecRequest struct {
 // wsExecEvent is streamed back to the client.
 type wsExecEvent struct {
 	Type     string `json:"type"`               // "stdout", "stderr", "exit", "error"
-	Data     string `json:"data,omitempty"`      // output data
-	ExitCode int    `json:"exitCode,omitempty"`  // only for type "exit"
+	Data     string `json:"data,omitempty"`     // output data
+	ExitCode int    `json:"exitCode,omitempty"` // only for type "exit"
 }
 
 // wsWriter is an io.Writer that sends each Write as a WebSocket message.
 type wsWriter struct {
-	mu       *sync.Mutex
-	conn     *websocket.Conn
+	mu         *sync.Mutex
+	conn       *websocket.Conn
 	streamType string // "stdout" or "stderr"
 }
 

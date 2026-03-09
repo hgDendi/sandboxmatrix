@@ -1522,10 +1522,10 @@ func TestShardTaskNoGateway(t *testing.T) {
 
 func TestMapRequestToPermission(t *testing.T) {
 	tests := []struct {
-		method   string
-		path     string
-		wantRes  string
-		wantAct  string
+		method  string
+		path    string
+		wantRes string
+		wantAct string
 	}{
 		{http.MethodGet, "/api/v1/sandboxes", "sandbox", "read"},
 		{http.MethodGet, "/api/v1/sandboxes/my-sb", "sandbox", "read"},
