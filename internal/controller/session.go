@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"crypto/rand"
 	"fmt"
 	"log/slog"
 	"time"
@@ -16,7 +17,9 @@ var errSessionsNotConfigured = fmt.Errorf("sessions not configured")
 // generateSessionID produces a unique session ID from the sandbox name and
 // the current time.
 func generateSessionID(sandboxName string) string {
-	return fmt.Sprintf("%s-%d", sandboxName, time.Now().UnixNano())
+	b := make([]byte, 16)
+	_, _ = rand.Read(b)
+	return fmt.Sprintf("%s-%x", sandboxName, b)
 }
 
 // StartSession creates a new session for a sandbox.

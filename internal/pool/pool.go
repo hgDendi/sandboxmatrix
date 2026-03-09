@@ -198,6 +198,12 @@ func (p *Pool) Release(ctx context.Context, containerID, blueprintPath string) e
 
 // Warm starts background goroutines to maintain minimum pool levels.
 func (p *Pool) Warm(ctx context.Context) error {
+	// Cancel previous warm goroutines if any.
+	if p.cancel != nil {
+		p.cancel()
+		p.wg.Wait()
+	}
+
 	ctx, cancel := context.WithCancel(ctx)
 	p.cancel = cancel
 

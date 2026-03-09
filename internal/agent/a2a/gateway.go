@@ -11,6 +11,8 @@ import (
 	"github.com/google/uuid"
 )
 
+const maxInboxSize = 10000
+
 // Message represents an agent-to-agent message.
 type Message struct {
 	ID        string    `json:"id"`
@@ -60,6 +62,10 @@ func (g *Gateway) Send(ctx context.Context, msg *Message) error {
 	}
 
 	g.mu.Lock()
+	if len(g.inboxes[msg.To]) >= maxInboxSize {
+		g.mu.Unlock()
+		return fmt.Errorf("inbox for %q is full (max %d messages)", msg.To, maxInboxSize)
+	}
 	g.inboxes[msg.To] = append(g.inboxes[msg.To], *msg)
 	// Copy handlers under lock to invoke outside.
 	handlers := make([]HandlerFunc, len(g.handlers[msg.To]))

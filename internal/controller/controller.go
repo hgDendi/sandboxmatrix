@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -180,6 +182,24 @@ func (c *Controller) Create(ctx context.Context, opts CreateOptions) (*v1alpha1.
 		})
 	}
 
+	// Validate workspace directory.
+	if opts.WorkspaceDir != "" {
+		cleanedWS := filepath.Clean(opts.WorkspaceDir)
+		if filepath.IsAbs(cleanedWS) {
+			allowed := false
+			for _, prefix := range []string{"/home/", "/Users/", "/tmp/", "/workspace/", "/opt/"} {
+				if strings.HasPrefix(cleanedWS, prefix) {
+					allowed = true
+					break
+				}
+			}
+			if !allowed {
+				recordOp("create", "error", start)
+				return nil, fmt.Errorf("workspace path %q is not in an allowed directory", opts.WorkspaceDir)
+			}
+		}
+	}
+
 	// Workspace mount.
 	if opts.WorkspaceDir != "" {
 		mountPath := bp.Spec.Workspace.MountPath
@@ -249,6 +269,8 @@ func (c *Controller) Create(ctx context.Context, opts CreateOptions) (*v1alpha1.
 		_ = c.store.Save(sb) // persist Running state before probe
 		runner := probe.NewRunner(c.runtime)
 		if err := runner.WaitForReady(ctx, runtimeID, sb.Status.IP, bp.Spec.ReadinessProbe); err != nil {
+			// Destroy the container to prevent leaks.
+			_ = c.runtime.Destroy(ctx, runtimeID)
 			sb.Status.ProbeError = err.Error()
 			sb.Status.State = v1alpha1.SandboxStateError
 			sb.Status.Message = "readiness probe failed: " + err.Error()
@@ -298,10 +320,14 @@ func (c *Controller) Stop(ctx context.Context, name string) error {
 	sb.Status.StoppedAt = &now
 	sb.Metadata.UpdatedAt = now
 
+	if err := c.store.Save(sb); err != nil {
+		recordOp("stop", "error", start)
+		return err
+	}
 	observability.Metrics.SandboxesActive.Dec()
 	recordOp("stop", "success", start)
 	slog.Info("sandbox stopped", "name", name)
-	return c.store.Save(sb)
+	return nil
 }
 
 // Start starts a stopped sandbox.
@@ -331,10 +357,14 @@ func (c *Controller) Start(ctx context.Context, name string) error {
 	sb.Status.StoppedAt = nil
 	sb.Metadata.UpdatedAt = now
 
+	if err := c.store.Save(sb); err != nil {
+		recordOp("start", "error", start)
+		return err
+	}
 	observability.Metrics.SandboxesActive.Inc()
 	recordOp("start", "success", start)
 	slog.Info("sandbox started", "name", name)
-	return c.store.Save(sb)
+	return nil
 }
 
 // Destroy removes a sandbox and cleans up resources.

@@ -47,6 +47,8 @@ func (c *Collector) Collect(ctx context.Context, coordinatorName, taskID string,
 	}
 
 	deadline := time.After(time.Duration(timeoutSec) * time.Second)
+	ticker := time.NewTicker(500 * time.Millisecond)
+	defer ticker.Stop()
 	var results []v1alpha1.TaskResult
 
 	for {
@@ -55,13 +57,12 @@ func (c *Collector) Collect(ctx context.Context, coordinatorName, taskID string,
 			return c.buildResult(taskID, strategy, results), ctx.Err()
 		case <-deadline:
 			return c.buildResult(taskID, strategy, results), nil
-		default:
+		case <-ticker.C:
 		}
 
 		// Poll for task-result messages only, preserving other message types.
 		msgs, err := c.gateway.ReceiveByType(ctx, coordinatorName, "task-result")
 		if err != nil {
-			time.Sleep(500 * time.Millisecond)
 			continue
 		}
 
@@ -98,10 +99,6 @@ func (c *Collector) Collect(ctx context.Context, coordinatorName, taskID string,
 			if len(results) >= expectedCount {
 				return c.buildResult(taskID, strategy, results), nil
 			}
-		}
-
-		if len(msgs) == 0 {
-			time.Sleep(500 * time.Millisecond)
 		}
 	}
 }

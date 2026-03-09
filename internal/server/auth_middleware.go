@@ -105,6 +105,11 @@ func mapRequestToPermission(method, path string) (resource, action string) {
 		resource = parts[0]
 	}
 
+	// Special case: WebSocket exec stream requires exec permission.
+	if method == http.MethodGet && len(parts) >= 3 && parts[2] == "exec" {
+		return resource, "exec"
+	}
+
 	// Determine action from HTTP method and sub-path.
 	switch method {
 	case http.MethodGet:

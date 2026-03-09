@@ -294,11 +294,12 @@ func (d *Dashboard) handleExecWS(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Execute command.
-	var stdout, stderr bytes.Buffer
+	stdout := &dashLimitedWriter{limit: 10 << 20}
+	stderr := &dashLimitedWriter{limit: 10 << 20}
 	result, execErr := d.ctrl.Exec(r.Context(), name, &runtime.ExecConfig{
 		Cmd:    []string{"sh", "-c", req.Command},
-		Stdout: &stdout,
-		Stderr: &stderr,
+		Stdout: stdout,
+		Stderr: stderr,
 	})
 
 	if execErr != nil {
@@ -306,10 +307,10 @@ func (d *Dashboard) handleExecWS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if out := stdout.String(); out != "" {
+	if out := stdout.buf.String(); out != "" {
 		_ = conn.WriteJSON(map[string]string{"type": "stdout", "data": out})
 	}
-	if errOut := stderr.String(); errOut != "" {
+	if errOut := stderr.buf.String(); errOut != "" {
 		_ = conn.WriteJSON(map[string]string{"type": "stderr", "data": errOut})
 	}
 	_ = conn.WriteJSON(map[string]any{"type": "exit", "exitCode": result.ExitCode})
@@ -321,6 +322,8 @@ func (d *Dashboard) handleExecREST(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "sandbox name required"})
 		return
 	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20) // 1MB limit
 
 	var req struct {
 		Command string `json:"command"`
@@ -334,11 +337,12 @@ func (d *Dashboard) handleExecREST(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var stdout, stderr bytes.Buffer
+	stdout := &dashLimitedWriter{limit: 10 << 20}
+	stderr := &dashLimitedWriter{limit: 10 << 20}
 	result, err := d.ctrl.Exec(r.Context(), name, &runtime.ExecConfig{
 		Cmd:    []string{"sh", "-c", req.Command},
-		Stdout: &stdout,
-		Stderr: &stderr,
+		Stdout: stdout,
+		Stderr: stderr,
 	})
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
@@ -347,9 +351,26 @@ func (d *Dashboard) handleExecREST(w http.ResponseWriter, r *http.Request) {
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"exitCode": result.ExitCode,
-		"stdout":   stdout.String(),
-		"stderr":   stderr.String(),
+		"stdout":   stdout.buf.String(),
+		"stderr":   stderr.buf.String(),
 	})
+}
+
+// dashLimitedWriter caps the amount of data buffered from exec output.
+type dashLimitedWriter struct {
+	buf   bytes.Buffer
+	limit int
+}
+
+func (w *dashLimitedWriter) Write(p []byte) (int, error) {
+	remaining := w.limit - w.buf.Len()
+	if remaining <= 0 {
+		return len(p), nil
+	}
+	if len(p) > remaining {
+		p = p[:remaining]
+	}
+	return w.buf.Write(p)
 }
 
 // writeJSON writes a JSON response with the given status code.

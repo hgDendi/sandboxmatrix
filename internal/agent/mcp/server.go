@@ -20,6 +20,22 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 )
 
+type mcpLimitedWriter struct {
+	buf   bytes.Buffer
+	limit int
+}
+
+func (w *mcpLimitedWriter) Write(p []byte) (int, error) {
+	remaining := w.limit - w.buf.Len()
+	if remaining <= 0 {
+		return len(p), nil
+	}
+	if len(p) > remaining {
+		p = p[:remaining]
+	}
+	return w.buf.Write(p)
+}
+
 // Server wraps an MCP server that exposes sandbox operations as tools.
 type Server struct {
 	mcpServer *server.MCPServer
@@ -333,20 +349,20 @@ func (s *Server) handleSandboxExec(ctx context.Context, request mcp.CallToolRequ
 		return mcp.NewToolResultError("parameter 'command' is required"), nil
 	}
 
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
+	stdout := &mcpLimitedWriter{limit: 10 << 20}
+	stderr := &mcpLimitedWriter{limit: 10 << 20}
 
 	result, err := s.ctrl.Exec(ctx, name, &runtime.ExecConfig{
 		Cmd:    []string{"sh", "-c", command},
-		Stdout: &stdout,
-		Stderr: &stderr,
+		Stdout: stdout,
+		Stderr: stderr,
 	})
 	if err != nil {
 		return mcp.NewToolResultError(fmt.Sprintf("exec failed: %v", err)), nil
 	}
 
-	output := stdout.String()
-	if errOut := stderr.String(); errOut != "" {
+	output := stdout.buf.String()
+	if errOut := stderr.buf.String(); errOut != "" {
 		output += "\n[stderr]\n" + errOut
 	}
 	if result.ExitCode != 0 {
@@ -440,6 +456,10 @@ func (s *Server) handleA2ASend(ctx context.Context, request mcp.CallToolRequest)
 	}
 	payload, _ := args["payload"].(string)
 
+	if s.gateway == nil {
+		return mcp.NewToolResultError("A2A gateway not configured"), nil
+	}
+
 	msg := &a2a.Message{
 		From:    from,
 		To:      to,
@@ -459,6 +479,10 @@ func (s *Server) handleA2AReceive(ctx context.Context, request mcp.CallToolReque
 	sandboxName, _ := args["sandbox_name"].(string)
 	if sandboxName == "" {
 		return mcp.NewToolResultError("parameter 'sandbox_name' is required"), nil
+	}
+
+	if s.gateway == nil {
+		return mcp.NewToolResultError("A2A gateway not configured"), nil
 	}
 
 	msgs, err := s.gateway.Receive(ctx, sandboxName)
@@ -493,6 +517,10 @@ func (s *Server) handleA2ABroadcast(ctx context.Context, request mcp.CallToolReq
 		return mcp.NewToolResultError("parameter 'type' is required"), nil
 	}
 	payload, _ := args["payload"].(string)
+
+	if s.gateway == nil {
+		return mcp.NewToolResultError("A2A gateway not configured"), nil
+	}
 
 	targets := strings.Split(targetsStr, ",")
 	for i := range targets {
@@ -542,6 +570,10 @@ func (s *Server) handleMatrixShardTask(ctx context.Context, request mcp.CallTool
 	}
 	strategy := sharding.NewStrategy(cfg)
 	assignments := strategy.Distribute(tasks, mx.Members)
+
+	if s.gateway == nil {
+		return mcp.NewToolResultError("A2A gateway not configured"), nil
+	}
 
 	// Send each assignment via A2A.
 	for _, a := range assignments {
@@ -598,6 +630,10 @@ func (s *Server) handleMatrixCollectResults(ctx context.Context, request mcp.Cal
 	}
 	if aggCfg.TimeoutSec == 0 {
 		aggCfg.TimeoutSec = timeoutSec
+	}
+
+	if s.gateway == nil {
+		return mcp.NewToolResultError("A2A gateway not configured"), nil
 	}
 
 	collector := aggregation.NewCollector(s.gateway)

@@ -67,6 +67,7 @@ func handleExecStream(ctrl *controller.Controller) http.HandlerFunc {
 			return // Upgrade already wrote the error response
 		}
 		defer conn.Close()
+		conn.SetReadLimit(1 << 20) // 1MB max message size
 
 		observability.Metrics.WebSocketConnections.Inc()
 		defer observability.Metrics.WebSocketConnections.Dec()
@@ -120,6 +121,9 @@ func handleExecStream(ctrl *controller.Controller) http.HandlerFunc {
 			Stderr: stderrW,
 			Stdin:  stdinR,
 		})
+
+		// Signal EOF to stdin goroutine.
+		stdinR.Close()
 
 		mu.Lock()
 		defer mu.Unlock()

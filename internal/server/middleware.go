@@ -30,9 +30,15 @@ func corsMiddleware(next http.Handler) http.Handler {
 }
 
 // jsonContentTypeMiddleware sets the Content-Type header to application/json
-// for all responses.
+// for API responses, skipping non-JSON endpoints like metrics and WebSocket
+// upgrades.
 func jsonContentTypeMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Skip non-JSON endpoints: metrics, WebSocket upgrades.
+		if r.URL.Path == "/metrics" || r.Header.Get("Upgrade") == "websocket" {
+			next.ServeHTTP(w, r)
+			return
+		}
 		w.Header().Set("Content-Type", "application/json")
 		next.ServeHTTP(w, r)
 	})

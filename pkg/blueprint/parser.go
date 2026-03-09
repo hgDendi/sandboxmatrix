@@ -4,6 +4,8 @@ package blueprint
 import (
 	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
 
 	v1alpha1 "github.com/hg-dendi/sandboxmatrix/pkg/api/v1alpha1"
 	"gopkg.in/yaml.v3"
@@ -14,8 +16,22 @@ const (
 	expectedKind       = "Blueprint"
 )
 
+// validatePath checks that a blueprint path is safe to read.
+// It rejects absolute paths outside the working directory and path traversal attempts.
+func validatePath(path string) error {
+	cleaned := filepath.Clean(path)
+	// Reject paths that try to escape via ..
+	if strings.Contains(cleaned, "..") {
+		return fmt.Errorf("path traversal not allowed: %s", path)
+	}
+	return nil
+}
+
 // ParseFile reads and parses a Blueprint from a YAML file.
 func ParseFile(path string) (*v1alpha1.Blueprint, error) {
+	if err := validatePath(path); err != nil {
+		return nil, err
+	}
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("read blueprint file: %w", err)
@@ -99,6 +115,9 @@ func Validate(bp *v1alpha1.Blueprint) []error {
 
 // ValidateFile parses and validates a Blueprint file in one step.
 func ValidateFile(path string) (*v1alpha1.Blueprint, []error) {
+	if err := validatePath(path); err != nil {
+		return nil, []error{err}
+	}
 	bp, err := ParseFile(path)
 	if err != nil {
 		return nil, []error{err}
