@@ -1197,7 +1197,7 @@ func TestStopMatrix(t *testing.T) {
 		{Name: "b", Blueprint: bp},
 	}
 
-	mx, err := ctrl.CreateMatrix(context.Background(), "stop-mx", members)
+	_, err := ctrl.CreateMatrix(context.Background(), "stop-mx", members)
 	if err != nil {
 		t.Fatalf("CreateMatrix: %v", err)
 	}
@@ -1208,7 +1208,7 @@ func TestStopMatrix(t *testing.T) {
 	}
 
 	// Verify matrix state.
-	mx, err = ctrl.GetMatrix("stop-mx")
+	mx, err := ctrl.GetMatrix("stop-mx")
 	if err != nil {
 		t.Fatalf("GetMatrix after stop: %v", err)
 	}
@@ -1451,11 +1451,10 @@ func TestSnapshotNonExistent(t *testing.T) {
 }
 
 func TestSnapshotNoRuntimeID(t *testing.T) {
-	ctrl, _ := newTestController(t)
 	// Manually insert a sandbox with no runtime ID.
 	store := state.NewMemoryStore()
 	rt := newCtrlMockRuntime()
-	ctrl = New(rt, store, nil, nil)
+	ctrl := New(rt, store, nil, nil)
 
 	sb := &v1alpha1.Sandbox{
 		TypeMeta: v1alpha1.TypeMeta{APIVersion: "smx/v1alpha1", Kind: "Sandbox"},
@@ -1552,7 +1551,7 @@ func TestListSnapshots(t *testing.T) {
 		t.Fatalf("ListSnapshots: %v", err)
 	}
 	// Mock runtime returns nil/empty.
-	if snapshots != nil && len(snapshots) != 0 {
+	if len(snapshots) != 0 {
 		t.Errorf("expected 0 snapshots, got %d", len(snapshots))
 	}
 }

@@ -34,7 +34,7 @@ func NewCollector(gateway *a2a.Gateway) *Collector {
 // Collect waits for results from the specified members, polling the coordinator's
 // A2A inbox for "task-result" messages. It returns when all expected results are
 // received or the timeout expires.
-func (c *Collector) Collect(ctx context.Context, coordinatorName string, taskID string, expectedCount int, cfg *v1alpha1.AggregationConfig) (*AggregatedResult, error) {
+func (c *Collector) Collect(ctx context.Context, coordinatorName, taskID string, expectedCount int, cfg *v1alpha1.AggregationConfig) (*AggregatedResult, error) {
 	strategy := "collect-all"
 	timeoutSec := 60
 	if cfg != nil {
@@ -106,7 +106,7 @@ func (c *Collector) Collect(ctx context.Context, coordinatorName string, taskID 
 	}
 }
 
-func (c *Collector) buildResult(taskID string, strategy string, results []v1alpha1.TaskResult) *AggregatedResult {
+func (c *Collector) buildResult(taskID, strategy string, results []v1alpha1.TaskResult) *AggregatedResult {
 	succeeded := 0
 	failed := 0
 	for _, r := range results {

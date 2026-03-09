@@ -27,29 +27,29 @@ type Server struct {
 
 // New creates a new Server that delegates to the given Controller and listens
 // on addr (e.g. ":8080").
-func New(ctrl *controller.Controller, addr string, opts ...ServerOption) *Server {
+func New(ctrl *controller.Controller, addr string, opts ...Option) *Server {
 	s := &Server{
 		ctrl:   ctrl,
 		addr:   addr,
 		router: http.NewServeMux(),
 	}
-	for _, opt := range opts {
-		opt(s)
+	for _, o := range opts {
+		o(s)
 	}
 	s.registerRoutes()
 	return s
 }
 
-// ServerOption configures the Server.
-type ServerOption func(*Server)
+// Option configures the Server.
+type Option func(*Server)
 
 // WithGateway attaches an A2A gateway for task sharding/aggregation endpoints.
-func WithGateway(gw *a2a.Gateway) ServerOption {
+func WithGateway(gw *a2a.Gateway) Option {
 	return func(s *Server) { s.gateway = gw }
 }
 
 // WithRBAC enables RBAC authentication and audit logging on the server.
-func WithRBAC(rbac *auth.RBAC, audit *auth.AuditLog) ServerOption {
+func WithRBAC(rbac *auth.RBAC, audit *auth.AuditLog) Option {
 	return func(s *Server) { s.rbac = rbac; s.audit = audit }
 }
 

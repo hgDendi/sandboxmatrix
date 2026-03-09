@@ -115,17 +115,17 @@ func TestBalanced_MaxDiffIsOne(t *testing.T) {
 	for _, a := range assignments {
 		counts[a.MemberName]++
 	}
-	min, max := 999, 0
+	lo, hi := 999, 0
 	for _, c := range counts {
-		if c < min {
-			min = c
+		if c < lo {
+			lo = c
 		}
-		if c > max {
-			max = c
+		if c > hi {
+			hi = c
 		}
 	}
-	if max-min > 1 {
-		t.Errorf("imbalanced: max=%d min=%d (diff %d)", max, min, max-min)
+	if hi-lo > 1 {
+		t.Errorf("imbalanced: max=%d min=%d (diff %d)", hi, lo, hi-lo)
 	}
 }
 

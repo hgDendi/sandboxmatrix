@@ -50,23 +50,25 @@ func (m *mockRuntime) Exec(_ context.Context, _ string, cfg *runtime.ExecConfig)
 }
 
 // Unused methods — satisfy the Runtime interface.
-func (m *mockRuntime) Create(context.Context, *runtime.CreateConfig) (string, error)  { return "", nil }
-func (m *mockRuntime) Start(context.Context, string) error                            { return nil }
-func (m *mockRuntime) Stop(context.Context, string) error                             { return nil }
-func (m *mockRuntime) Destroy(context.Context, string) error                          { return nil }
-func (m *mockRuntime) Info(context.Context, string) (runtime.Info, error)              { return runtime.Info{}, nil }
-func (m *mockRuntime) Stats(context.Context, string) (runtime.Stats, error)            { return runtime.Stats{}, nil }
-func (m *mockRuntime) List(context.Context) ([]runtime.Info, error)                    { return nil, nil }
-func (m *mockRuntime) Snapshot(context.Context, string, string) (string, error)        { return "", nil }
+func (m *mockRuntime) Create(context.Context, *runtime.CreateConfig) (string, error) { return "", nil }
+func (m *mockRuntime) Start(context.Context, string) error                           { return nil }
+func (m *mockRuntime) Stop(context.Context, string) error                            { return nil }
+func (m *mockRuntime) Destroy(context.Context, string) error                         { return nil }
+func (m *mockRuntime) Info(context.Context, string) (runtime.Info, error)            { return runtime.Info{}, nil }
+func (m *mockRuntime) Stats(context.Context, string) (runtime.Stats, error) {
+	return runtime.Stats{}, nil
+}
+func (m *mockRuntime) List(context.Context) ([]runtime.Info, error)             { return nil, nil }
+func (m *mockRuntime) Snapshot(context.Context, string, string) (string, error) { return "", nil }
 func (m *mockRuntime) Restore(context.Context, string, *runtime.CreateConfig) (string, error) {
 	return "", nil
 }
 func (m *mockRuntime) ListSnapshots(context.Context, string) ([]runtime.SnapshotInfo, error) {
 	return nil, nil
 }
-func (m *mockRuntime) DeleteSnapshot(context.Context, string) error          { return nil }
-func (m *mockRuntime) CreateNetwork(context.Context, string, bool) error     { return nil }
-func (m *mockRuntime) DeleteNetwork(context.Context, string) error           { return nil }
+func (m *mockRuntime) DeleteSnapshot(context.Context, string) error      { return nil }
+func (m *mockRuntime) CreateNetwork(context.Context, string, bool) error { return nil }
+func (m *mockRuntime) DeleteNetwork(context.Context, string) error       { return nil }
 
 // ---------------------------------------------------------------------------
 // Tests

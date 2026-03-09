@@ -26,7 +26,7 @@ func NewRunner(rt runtime.Runtime) *Runner {
 
 // WaitForReady polls the probe until it passes or the failure threshold is reached.
 // It returns nil when the probe succeeds, or an error describing the failure.
-func (r *Runner) WaitForReady(ctx context.Context, runtimeID string, sandboxIP string, cfg *v1alpha1.ProbeConfig) error {
+func (r *Runner) WaitForReady(ctx context.Context, runtimeID, sandboxIP string, cfg *v1alpha1.ProbeConfig) error {
 	if cfg == nil {
 		return nil
 	}
@@ -92,7 +92,7 @@ func (r *Runner) WaitForReady(ctx context.Context, runtimeID string, sandboxIP s
 }
 
 // runOnce executes a single probe check.
-func (r *Runner) runOnce(ctx context.Context, runtimeID string, sandboxIP string, cfg *v1alpha1.ProbeConfig, timeout time.Duration) error {
+func (r *Runner) runOnce(ctx context.Context, runtimeID, sandboxIP string, cfg *v1alpha1.ProbeConfig, timeout time.Duration) error {
 	probeCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
@@ -141,7 +141,7 @@ func (r *Runner) httpProbe(ctx context.Context, ip string, port int, path string
 	}
 
 	url := fmt.Sprintf("http://%s:%d%s", ip, port, path)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
 	if err != nil {
 		return fmt.Errorf("create http request: %w", err)
 	}

@@ -588,7 +588,7 @@ func (s *Server) handleMatrixCollectResults(ctx context.Context, request mcp.Cal
 	// Parse optional timeout.
 	timeoutSec := 60
 	if t, ok := args["timeout"].(string); ok && t != "" {
-		fmt.Sscanf(t, "%d", &timeoutSec)
+		_, _ = fmt.Sscanf(t, "%d", &timeoutSec)
 	}
 
 	// Copy config to avoid mutating the stored matrix.
@@ -621,7 +621,7 @@ func (s *Server) handleSandboxReadyWait(ctx context.Context, request mcp.CallToo
 
 	timeoutSec := 60
 	if t, ok := args["timeout"].(string); ok && t != "" {
-		fmt.Sscanf(t, "%d", &timeoutSec)
+		_, _ = fmt.Sscanf(t, "%d", &timeoutSec)
 	}
 
 	// Poll sandbox state until Ready or timeout using a ticker.
@@ -632,7 +632,7 @@ func (s *Server) handleSandboxReadyWait(ctx context.Context, request mcp.CallToo
 	for {
 		select {
 		case <-ctx.Done():
-			return mcp.NewToolResultError("context cancelled"), nil
+			return mcp.NewToolResultError("context canceled"), nil
 		case <-deadline:
 			return mcp.NewToolResultError(fmt.Sprintf("sandbox %q did not become ready within %ds", name, timeoutSec)), nil
 		case <-ticker.C:

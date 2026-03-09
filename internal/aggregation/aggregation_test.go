@@ -81,10 +81,8 @@ func TestFirstSuccess_ReturnsEarly(t *testing.T) {
 	if result.Succeeded < 1 {
 		t.Error("expected at least 1 success")
 	}
-	// Should not wait for all 3.
-	if result.Total > 1 {
-		// This is acceptable — it may have picked up the message in one poll.
-	}
+	// Should not wait for all 3 — it returns on first success.
+	_ = result.Total // may be 1 or more depending on poll timing
 }
 
 func TestMajority_ReturnOnQuorum(t *testing.T) {

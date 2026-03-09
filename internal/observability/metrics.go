@@ -8,17 +8,17 @@ import (
 
 // Metrics holds all Prometheus metrics for sandboxMatrix.
 var Metrics = struct {
-	SandboxesActive       prometheus.Gauge
-	SandboxOpsTotal       *prometheus.CounterVec
-	SandboxOpDuration     *prometheus.HistogramVec
-	ExecDuration          *prometheus.HistogramVec
-	ExecTotal             *prometheus.CounterVec
-	SessionsActive        prometheus.Gauge
-	MatricesActive        prometheus.Gauge
-	PoolSize              *prometheus.GaugeVec
-	HTTPRequestsTotal     *prometheus.CounterVec
-	HTTPRequestDuration   *prometheus.HistogramVec
-	WebSocketConnections  prometheus.Gauge
+	SandboxesActive      prometheus.Gauge
+	SandboxOpsTotal      *prometheus.CounterVec
+	SandboxOpDuration    *prometheus.HistogramVec
+	ExecDuration         *prometheus.HistogramVec
+	ExecTotal            *prometheus.CounterVec
+	SessionsActive       prometheus.Gauge
+	MatricesActive       prometheus.Gauge
+	PoolSize             *prometheus.GaugeVec
+	HTTPRequestsTotal    *prometheus.CounterVec
+	HTTPRequestDuration  *prometheus.HistogramVec
+	WebSocketConnections prometheus.Gauge
 }{
 	SandboxesActive: promauto.NewGauge(prometheus.GaugeOpts{
 		Namespace: "smx",

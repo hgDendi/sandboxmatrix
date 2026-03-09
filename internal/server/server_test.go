@@ -784,7 +784,7 @@ func TestCreateMatrix(t *testing.T) {
 
 	bpPath := writeTempBlueprint(t, "test-member-bp")
 
-	body := fmt.Sprintf(`{"name":"test-mx","members":[{"name":"worker1","blueprint":"%s"},{"name":"worker2","blueprint":"%s"}]}`, bpPath, bpPath)
+	body := fmt.Sprintf(`{"name":"test-mx","members":[{"name":"worker1","blueprint":%q},{"name":"worker2","blueprint":%q}]}`, bpPath, bpPath)
 	resp, err := http.Post(ts.URL+"/api/v1/matrices", "application/json", bytes.NewBufferString(body))
 	if err != nil {
 		t.Fatalf("POST matrix: %v", err)

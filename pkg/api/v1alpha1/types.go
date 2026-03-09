@@ -91,10 +91,10 @@ type DeviceMapping struct {
 
 // ProbeConfig defines a readiness or liveness probe for a sandbox.
 type ProbeConfig struct {
-	Type             string   `json:"type" yaml:"type"`                                               // "exec", "http", "tcp"
-	Command          []string `json:"command,omitempty" yaml:"command,omitempty"`                      // exec type
-	Path             string   `json:"path,omitempty" yaml:"path,omitempty"`                            // http type
-	Port             int      `json:"port,omitempty" yaml:"port,omitempty"`                            // http/tcp type
+	Type             string   `json:"type" yaml:"type"`                           // "exec", "http", "tcp"
+	Command          []string `json:"command,omitempty" yaml:"command,omitempty"` // exec type
+	Path             string   `json:"path,omitempty" yaml:"path,omitempty"`       // http type
+	Port             int      `json:"port,omitempty" yaml:"port,omitempty"`       // http/tcp type
 	InitialDelaySec  int      `json:"initialDelaySec,omitempty" yaml:"initialDelaySec,omitempty"`
 	PeriodSec        int      `json:"periodSec,omitempty" yaml:"periodSec,omitempty"`
 	TimeoutSec       int      `json:"timeoutSec,omitempty" yaml:"timeoutSec,omitempty"`
@@ -193,7 +193,7 @@ type ShardingConfig struct {
 
 // AggregationConfig defines how results are collected from matrix members.
 type AggregationConfig struct {
-	Strategy   string `json:"strategy" yaml:"strategy"`     // "collect-all", "first-success", "majority"
+	Strategy   string `json:"strategy" yaml:"strategy"` // "collect-all", "first-success", "majority"
 	TimeoutSec int    `json:"timeoutSec" yaml:"timeoutSec"`
 }
 
