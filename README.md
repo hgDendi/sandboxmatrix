@@ -42,6 +42,7 @@ AI coding agents need isolated, reproducible environments to safely execute code
 | Resource quotas | ❌ | ❌ | ❌ | ❌ | ✅ CPU/mem/GPU/count |
 | Distributed tracing | ❌ | ❌ | ❌ | ❌ | ✅ OpenTelemetry |
 | Grafana dashboards | ❌ | ✅ | ❌ | ❌ | ✅ 3 built-in |
+| Dynamic autoscaling | ❌ | ✅ | ❌ | ❌ | ✅ Priority-based |
 | K8s Operator + Helm | ❌ | ❌ | ❌ | ❌ | ✅ |
 | Distributed state (etcd) | ➖ | ➖ | ❌ | ❌ | ✅ |
 
@@ -67,6 +68,7 @@ etcd               ->     etcd (distributed state)
 CRD + Operator     ->     CRD + Operator
 OpenTelemetry      ->     Distributed Tracing (OTLP)
 Grafana            ->     Grafana Dashboards (3 built-in)
+HPA/VPA            ->     Autoscaler (priority-based shrink/pause)
 Readiness Probe    ->     Readiness Probe (exec/HTTP/TCP)
 Device Plugin      ->     Device Passthrough (/dev/kvm, /dev/dri)
 Job Parallelism    ->     Task Sharding (round-robin/hash/balanced)
@@ -112,6 +114,7 @@ Job Parallelism    ->     Task Sharding (round-robin/hash/balanced)
 - **SDKs** -- Go, Python, and TypeScript clients with full API coverage
 - **WebSocket exec streaming** -- real-time stdout/stderr streaming with stdin support
 - **Pre-warmed pools** -- instant sandbox creation from pre-warmed container pools
+- **Dynamic autoscaling** -- auto shrink/pause sandboxes under host resource pressure, restore on recovery; 4 priority levels (critical > high > normal > low)
 - **RBAC** -- role-based access control (admin/operator/viewer) with token auth
 - **SSO/OIDC authentication** -- Google, GitHub, and generic OIDC IdP support with JWT tokens and auto user creation
 - **Team namespaces + resource quotas** -- teams with members, per-team limits on CPU, memory, GPU, sandbox/matrix counts
@@ -135,7 +138,7 @@ Job Parallelism    ->     Task Sharding (round-robin/hash/balanced)
 +----------------------------------------------------------------------+
 |                        Control Plane                                  |
 |  API Server  |  Scheduler  |  Pool Manager  |  RBAC + SSO/OIDC       |
-|  Team Quotas |  Audit Log  |  Metrics       |  OpenTelemetry Tracing |
+|  Team Quotas |  Autoscaler |  Audit + Metrics |  OpenTelemetry Tracing |
 +----------------------------------------------------------------------+
 |                        Orchestration Plane                            |
 |  Readiness Probes  |  Task Sharding  |  Result Aggregation           |
@@ -242,6 +245,10 @@ curl "http://localhost:8080/api/v1/sandboxes/my-sandbox/files/list?path=/workspa
 | `GET` | `/api/v1/teams/{name}/members` | List members |
 | `POST` | `/api/v1/teams/{name}/members` | Add member |
 | `DELETE` | `/api/v1/teams/{name}/members/{user}` | Remove member |
+| `GET` | `/api/v1/autoscale/status` | Autoscaler status and sandbox states |
+| `POST` | `/api/v1/autoscale/enable` | Enable dynamic autoscaling |
+| `POST` | `/api/v1/autoscale/disable` | Disable autoscaler, restore all |
+| `PUT` | `/api/v1/sandboxes/{name}/priority` | Set sandbox autoscale priority |
 
 > **More examples:** [API Reference](docs/api-reference.md) | [SDK Guide](docs/sdk-guide.md) | [Deployment Guide](docs/deployment.md)
 
@@ -390,6 +397,10 @@ agent = Agent(tools=[exec_tool, code_tool], ...)
 | `smx auth remove-user <name>` | | Remove a user |
 | `smx auth audit` | | View audit log |
 | `smx auth oidc-config` | | Show or configure OIDC settings |
+| **Autoscale** | | |
+| `smx autoscale status` | | Show autoscaler status and sandbox states |
+| `smx autoscale enable` | | Enable dynamic resource autoscaling |
+| `smx autoscale disable` | | Disable autoscaler, restore all sandboxes |
 | **Config** | | |
 | `smx config show` | | Display current configuration |
 | `smx config set <key> <value>` | | Set a configuration value |
@@ -719,6 +730,43 @@ cp deploy/grafana/provisioning/dashboards.yaml /etc/grafana/provisioning/dashboa
 ```
 
 Together, Prometheus metrics + OpenTelemetry traces + Grafana dashboards provide a complete observability stack.
+
+### Dynamic Autoscaler
+
+Auto-adjust sandbox resources based on host pressure — ideal for shared machines (e.g. build servers) where sandboxes coexist with other workloads.
+
+```yaml
+# ~/.sandboxmatrix/config.yaml
+autoscale:
+  enabled: true
+  interval: 10s              # Check host resources every 10s
+  memoryHighWater: 0.80      # Start shrinking at 80% host memory
+  memoryLowWater: 0.50       # Start recovering at 50%
+  cpuHighWater: 0.85         # CPU pressure threshold
+  cpuLowWater: 0.40          # CPU recovery threshold
+  minMemoryPerSandbox: 67108864  # Floor: 64MB per sandbox
+  minCpuPerSandbox: 0.1         # Floor: 0.1 cores
+```
+
+**4 pressure levels:**
+
+| Host Usage | Action | Low Priority | Normal | High | Critical |
+|---|---|---|---|---|---|
+| < 50% | Expand all | 100% | 100% | 100% | 100% |
+| 50-80% | Hold | - | - | - | - |
+| 80-90% | Shrink | 25% | 50% | 50% | 75% |
+| > 90% | Shrink + Pause | **Paused** | 25% | 50% | 75% |
+
+```bash
+# Set sandbox priority
+smx sandbox create dev-env -b python.yaml     # default: normal (1)
+curl -X PUT localhost:8080/api/v1/sandboxes/dev-env/priority -d '{"priority":2}'  # high
+
+# Monitor autoscaler
+smx autoscale status
+```
+
+Docker's `ContainerUpdate` API enables live adjustment of CPU/memory limits without restart. Paused sandboxes freeze all processes with zero CPU overhead and are instantly resumed on recovery.
 
 ### Structured Logging
 
