@@ -108,3 +108,23 @@ func (r *Runtime) CopyToContainer(_ context.Context, _ string, _ string, _ io.Re
 func (r *Runtime) CopyFromContainer(_ context.Context, _ string, _ string) (io.ReadCloser, error) {
 	return nil, ErrNotImplemented
 }
+
+// Pause is not implemented.
+func (r *Runtime) Pause(_ context.Context, _ string) error {
+	return ErrNotImplemented
+}
+
+// Unpause is not implemented.
+func (r *Runtime) Unpause(_ context.Context, _ string) error {
+	return ErrNotImplemented
+}
+
+// UpdateResources is not implemented.
+func (r *Runtime) UpdateResources(_ context.Context, _ string, _ runtime.ResourceUpdate) error {
+	return ErrNotImplemented
+}
+
+// HostInfo is not implemented.
+func (r *Runtime) HostInfo(_ context.Context) (runtime.HostResources, error) {
+	return runtime.HostResources{}, ErrNotImplemented
+}

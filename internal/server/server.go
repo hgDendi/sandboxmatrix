@@ -8,6 +8,7 @@ import (
 
 	"github.com/hg-dendi/sandboxmatrix/internal/agent/a2a"
 	"github.com/hg-dendi/sandboxmatrix/internal/auth"
+	"github.com/hg-dendi/sandboxmatrix/internal/autoscale"
 	"github.com/hg-dendi/sandboxmatrix/internal/controller"
 	"github.com/hg-dendi/sandboxmatrix/internal/quota"
 	"github.com/hg-dendi/sandboxmatrix/internal/state"
@@ -28,6 +29,7 @@ type Server struct {
 	roleMapping  map[string]string
 	teams        state.TeamStore
 	quotaManager *quota.Manager
+	autoscaler   *autoscale.Autoscaler
 	addr         string
 	router       *http.ServeMux
 	server       *http.Server
@@ -73,6 +75,11 @@ func WithOIDC(provider *auth.OIDCProvider, jwtSvc *auth.JWTService, roleMapping 
 // WithTeams enables team management and quota enforcement on the server.
 func WithTeams(teams state.TeamStore, qm *quota.Manager) Option {
 	return func(s *Server) { s.teams = teams; s.quotaManager = qm }
+}
+
+// WithAutoscaler enables dynamic resource autoscaling on the server.
+func WithAutoscaler(as *autoscale.Autoscaler) Option {
+	return func(s *Server) { s.autoscaler = as }
 }
 
 // registerRoutes sets up all API routes on the server's mux.
@@ -142,6 +149,14 @@ func (s *Server) registerRoutes() {
 		s.router.HandleFunc("GET /api/v1/auth/oidc/callback", handleOIDCCallback(oidcCfg, states))
 		s.router.HandleFunc("POST /api/v1/auth/token/refresh", handleTokenRefresh(s.jwtSvc, s.rbac))
 		s.router.HandleFunc("GET /api/v1/auth/userinfo", handleUserInfo(s.jwtSvc))
+	}
+
+	// Autoscale routes (only registered when autoscaler is configured).
+	if s.autoscaler != nil {
+		s.router.HandleFunc("GET /api/v1/autoscale/status", handleAutoscaleStatus(s.autoscaler))
+		s.router.HandleFunc("POST /api/v1/autoscale/enable", handleAutoscaleEnable(s.autoscaler))
+		s.router.HandleFunc("POST /api/v1/autoscale/disable", handleAutoscaleDisable(s.autoscaler))
+		s.router.HandleFunc("PUT /api/v1/sandboxes/{name}/priority", handleSetPriority(s.autoscaler))
 	}
 
 	// Team routes (only registered when team store is configured).

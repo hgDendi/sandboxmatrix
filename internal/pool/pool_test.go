@@ -170,6 +170,15 @@ func (m *mockRuntime) CopyFromContainer(_ context.Context, _ string, _ string) (
 	return nil, nil
 }
 
+func (m *mockRuntime) Pause(_ context.Context, _ string) error   { return nil }
+func (m *mockRuntime) Unpause(_ context.Context, _ string) error { return nil }
+func (m *mockRuntime) UpdateResources(_ context.Context, _ string, _ runtime.ResourceUpdate) error {
+	return nil
+}
+func (m *mockRuntime) HostInfo(_ context.Context) (runtime.HostResources, error) {
+	return runtime.HostResources{TotalCPUs: 4, TotalMemory: 16 * 1024 * 1024 * 1024}, nil
+}
+
 func (m *mockRuntime) containerCount() int {
 	m.mu.Lock()
 	defer m.mu.Unlock()

@@ -40,6 +40,12 @@ func (m *mockRuntime) CopyToContainer(_ context.Context, _ string, _ string, _ i
 func (m *mockRuntime) CopyFromContainer(_ context.Context, _ string, _ string) (io.ReadCloser, error) {
 	return nil, nil
 }
+func (m *mockRuntime) Pause(_ context.Context, _ string) error                          { return nil }
+func (m *mockRuntime) Unpause(_ context.Context, _ string) error                        { return nil }
+func (m *mockRuntime) UpdateResources(_ context.Context, _ string, _ ResourceUpdate) error { return nil }
+func (m *mockRuntime) HostInfo(_ context.Context) (HostResources, error) {
+	return HostResources{TotalCPUs: 4, TotalMemory: 16 * 1024 * 1024 * 1024}, nil
+}
 
 func TestRegistry(t *testing.T) {
 	reg := NewRegistry()

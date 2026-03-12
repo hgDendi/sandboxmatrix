@@ -117,6 +117,15 @@ func (m *dashMockRuntime) CopyFromContainer(_ context.Context, _ string, _ strin
 	return nil, nil
 }
 
+func (m *dashMockRuntime) Pause(_ context.Context, _ string) error   { return nil }
+func (m *dashMockRuntime) Unpause(_ context.Context, _ string) error { return nil }
+func (m *dashMockRuntime) UpdateResources(_ context.Context, _ string, _ runtime.ResourceUpdate) error {
+	return nil
+}
+func (m *dashMockRuntime) HostInfo(_ context.Context) (runtime.HostResources, error) {
+	return runtime.HostResources{TotalCPUs: 4, TotalMemory: 16 * 1024 * 1024 * 1024}, nil
+}
+
 // ---------------------------------------------------------------------------
 // In-memory session store for dashboard tests.
 // ---------------------------------------------------------------------------

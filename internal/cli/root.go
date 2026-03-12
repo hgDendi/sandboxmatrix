@@ -39,6 +39,7 @@ isolated development environments with pluggable runtime backends.`,
 		newAuthCmd(),
 		newConfigCmd(),
 		newTeamCmd(),
+		newAutoscaleCmd(),
 	)
 
 	// Runtime commands require Docker; initialize lazily on use.

@@ -154,4 +154,42 @@ type Runtime interface {
 
 	// CopyFromContainer reads a file from inside the container.
 	CopyFromContainer(ctx context.Context, id string, srcPath string) (io.ReadCloser, error)
+
+	// Pause suspends a running container (freezes all processes).
+	Pause(ctx context.Context, id string) error
+
+	// Unpause resumes a paused container.
+	Unpause(ctx context.Context, id string) error
+
+	// UpdateResources dynamically adjusts resource limits on a running container.
+	UpdateResources(ctx context.Context, id string, cfg ResourceUpdate) error
+
+	// HostInfo returns resource information about the host machine.
+	HostInfo(ctx context.Context) (HostResources, error)
 }
+
+// ResourceUpdate specifies new resource limits for a running container.
+type ResourceUpdate struct {
+	CPUQuota int64 // CPU quota in microseconds per 100ms period (100000 = 1 core)
+	Memory   int64 // Memory limit in bytes (0 = unchanged)
+}
+
+// HostResources describes the host machine's total and available resources.
+type HostResources struct {
+	TotalCPUs   int     `json:"totalCpus"`
+	TotalMemory int64   `json:"totalMemory"`
+	UsedMemory  int64   `json:"usedMemory"`
+	AvailMemory int64   `json:"availMemory"`
+	CPUPercent  float64 `json:"cpuPercent"`
+	LoadAvg1    float64 `json:"loadAvg1"`
+}
+
+// SandboxPriority defines the eviction priority of a sandbox.
+type SandboxPriority int
+
+const (
+	PriorityLow      SandboxPriority = 0 // First to be paused/shrunk
+	PriorityNormal   SandboxPriority = 1 // Default
+	PriorityHigh     SandboxPriority = 2 // Last to be affected
+	PriorityCritical SandboxPriority = 3 // Never paused, only shrunk
+)

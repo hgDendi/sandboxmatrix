@@ -75,6 +75,12 @@ func (m *mockRuntime) CopyToContainer(context.Context, string, string, io.Reader
 func (m *mockRuntime) CopyFromContainer(context.Context, string, string) (io.ReadCloser, error) {
 	return nil, nil
 }
+func (m *mockRuntime) Pause(context.Context, string) error                    { return nil }
+func (m *mockRuntime) Unpause(context.Context, string) error                  { return nil }
+func (m *mockRuntime) UpdateResources(context.Context, string, runtime.ResourceUpdate) error { return nil }
+func (m *mockRuntime) HostInfo(context.Context) (runtime.HostResources, error) {
+	return runtime.HostResources{TotalCPUs: 4, TotalMemory: 16 * 1024 * 1024 * 1024}, nil
+}
 
 // ---------------------------------------------------------------------------
 // Tests

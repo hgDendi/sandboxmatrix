@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/hg-dendi/sandboxmatrix/internal/autoscale"
 	"github.com/hg-dendi/sandboxmatrix/internal/observability"
 	"gopkg.in/yaml.v3"
 )
@@ -29,6 +30,7 @@ type Config struct {
 	OIDC           OIDCServerConfig            `yaml:"oidc" json:"oidc"`
 	JWT            JWTServerConfig             `yaml:"jwt" json:"jwt"`
 	Tracing        observability.TracingConfig `yaml:"tracing" json:"tracing"`
+	Autoscale      autoscale.Config            `yaml:"autoscale" json:"autoscale"`
 }
 
 // OIDCServerConfig holds OIDC authentication configuration.
@@ -82,6 +84,7 @@ func DefaultConfig() *Config {
 			SampleRate:  1.0,
 			Endpoint:    "localhost:4318",
 		},
+		Autoscale: autoscale.DefaultConfig(),
 	}
 }
 

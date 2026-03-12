@@ -233,6 +233,15 @@ func (m *ctrlMockRuntime) CopyFromContainer(_ context.Context, _ string, _ strin
 	return nil, nil
 }
 
+func (m *ctrlMockRuntime) Pause(_ context.Context, _ string) error   { return nil }
+func (m *ctrlMockRuntime) Unpause(_ context.Context, _ string) error { return nil }
+func (m *ctrlMockRuntime) UpdateResources(_ context.Context, _ string, _ runtime.ResourceUpdate) error {
+	return nil
+}
+func (m *ctrlMockRuntime) HostInfo(_ context.Context) (runtime.HostResources, error) {
+	return runtime.HostResources{TotalCPUs: 4, TotalMemory: 16 * 1024 * 1024 * 1024}, nil
+}
+
 // containerCount returns the number of containers tracked by the mock.
 func (m *ctrlMockRuntime) containerCount() int {
 	m.mu.Lock()

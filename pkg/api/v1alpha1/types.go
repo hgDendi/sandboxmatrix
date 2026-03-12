@@ -15,6 +15,7 @@ const (
 	SandboxStateReady      SandboxState = "Ready"
 	SandboxStateDestroying SandboxState = "Destroying"
 	SandboxStateDestroyed  SandboxState = "Destroyed"
+	SandboxStatePaused     SandboxState = "Paused"
 )
 
 // ObjectMeta contains metadata common to all API objects.
@@ -138,6 +139,7 @@ type SandboxSpec struct {
 	Resources     Resources     `json:"resources,omitempty" yaml:"resources,omitempty"`
 	Workspace     WorkspaceSpec `json:"workspace,omitempty" yaml:"workspace,omitempty"`
 	Team          string        `json:"team,omitempty" yaml:"team,omitempty"`
+	Priority      int           `json:"priority,omitempty" yaml:"priority,omitempty"` // 0=low, 1=normal, 2=high, 3=critical
 }
 
 // SandboxStatus holds the observed state of a sandbox.

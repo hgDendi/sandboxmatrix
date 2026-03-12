@@ -3,12 +3,16 @@ package docker
 
 import (
 	"archive/tar"
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
+	"os/exec"
 	"path/filepath"
+	goruntime "runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -593,6 +597,160 @@ func (r *Runtime) RemoveImage(ctx context.Context, ref string) error {
 		return fmt.Errorf("remove image: %w", err)
 	}
 	return nil
+}
+
+func (r *Runtime) Pause(ctx context.Context, id string) error {
+	return r.client.ContainerPause(ctx, id)
+}
+
+func (r *Runtime) Unpause(ctx context.Context, id string) error {
+	return r.client.ContainerUnpause(ctx, id)
+}
+
+func (r *Runtime) UpdateResources(ctx context.Context, id string, cfg runtime.ResourceUpdate) error {
+	updateCfg := container.UpdateConfig{
+		Resources: container.Resources{},
+	}
+	if cfg.CPUQuota > 0 {
+		updateCfg.Resources.CPUQuota = cfg.CPUQuota
+		updateCfg.Resources.CPUPeriod = 100000 // 100ms standard period
+	}
+	if cfg.Memory > 0 {
+		updateCfg.Resources.Memory = cfg.Memory
+	}
+	_, err := r.client.ContainerUpdate(ctx, id, updateCfg)
+	return err
+}
+
+func (r *Runtime) HostInfo(ctx context.Context) (runtime.HostResources, error) {
+	info, err := r.client.Info(ctx)
+	if err != nil {
+		return runtime.HostResources{}, fmt.Errorf("docker info: %w", err)
+	}
+
+	res := runtime.HostResources{
+		TotalCPUs:   info.NCPU,
+		TotalMemory: info.MemTotal,
+	}
+
+	if res.TotalCPUs == 0 {
+		res.TotalCPUs = goruntime.NumCPU()
+	}
+
+	avail, used, err := systemMemory()
+	if err == nil {
+		res.AvailMemory = avail
+		res.UsedMemory = used
+	} else if res.TotalMemory > 0 {
+		res.AvailMemory = res.TotalMemory / 2
+		res.UsedMemory = res.TotalMemory / 2
+	}
+
+	return res, nil
+}
+
+func systemMemory() (avail, used int64, err error) {
+	switch goruntime.GOOS {
+	case "linux":
+		return linuxMemory()
+	case "darwin":
+		return darwinMemory()
+	default:
+		return 0, 0, fmt.Errorf("unsupported OS: %s", goruntime.GOOS)
+	}
+}
+
+func linuxMemory() (avail, used int64, err error) {
+	f, err := os.Open("/proc/meminfo")
+	if err != nil {
+		return 0, 0, err
+	}
+	defer f.Close()
+
+	var total, available int64
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.HasPrefix(line, "MemTotal:") {
+			total = parseProcMemLine(line)
+		} else if strings.HasPrefix(line, "MemAvailable:") {
+			available = parseProcMemLine(line)
+		}
+	}
+	if total == 0 {
+		return 0, 0, fmt.Errorf("could not parse /proc/meminfo")
+	}
+	return available, total - available, nil
+}
+
+func parseProcMemLine(line string) int64 {
+	fields := strings.Fields(line)
+	if len(fields) < 2 {
+		return 0
+	}
+	val, err := strconv.ParseInt(fields[1], 10, 64)
+	if err != nil {
+		return 0
+	}
+	return val * 1024
+}
+
+func darwinMemory() (avail, used int64, err error) {
+	out, err := exec.Command("sysctl", "-n", "hw.memsize").Output()
+	if err != nil {
+		return 0, 0, fmt.Errorf("sysctl hw.memsize: %w", err)
+	}
+	total, err := strconv.ParseInt(strings.TrimSpace(string(out)), 10, 64)
+	if err != nil {
+		return 0, 0, fmt.Errorf("parse hw.memsize: %w", err)
+	}
+
+	vmOut, err := exec.Command("vm_stat").Output()
+	if err != nil {
+		return total / 2, total / 2, nil
+	}
+
+	pageSize := int64(4096)
+	var free, inactive int64
+	for _, line := range strings.Split(string(vmOut), "\n") {
+		if strings.HasPrefix(line, "Mach Virtual Memory Statistics") {
+			if idx := strings.Index(line, "page size of"); idx >= 0 {
+				fields := strings.Fields(line[idx:])
+				if len(fields) >= 4 {
+					if ps, e := strconv.ParseInt(fields[3], 10, 64); e == nil {
+						pageSize = ps
+					}
+				}
+			}
+			continue
+		}
+		if strings.HasPrefix(line, "Pages free:") {
+			free = parseVMStatLine(line)
+		} else if strings.HasPrefix(line, "Pages inactive:") {
+			inactive = parseVMStatLine(line)
+		}
+	}
+
+	availBytes := (free + inactive) * pageSize
+	usedBytes := total - availBytes
+	if usedBytes < 0 {
+		usedBytes = 0
+	}
+	return availBytes, usedBytes, nil
+}
+
+func parseVMStatLine(line string) int64 {
+	parts := strings.SplitN(line, ":", 2)
+	if len(parts) < 2 {
+		return 0
+	}
+	valStr := strings.TrimSpace(parts[1])
+	valStr = strings.TrimSuffix(valStr, ".")
+	val, err := strconv.ParseInt(valStr, 10, 64)
+	if err != nil {
+		return 0
+	}
+	return val
 }
 
 func (r *Runtime) ensureImage(ctx context.Context, ref string) error {

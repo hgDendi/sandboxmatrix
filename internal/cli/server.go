@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/hg-dendi/sandboxmatrix/internal/auth"
+	"github.com/hg-dendi/sandboxmatrix/internal/autoscale"
 	"github.com/hg-dendi/sandboxmatrix/internal/config"
 	"github.com/hg-dendi/sandboxmatrix/internal/controller"
 	"github.com/hg-dendi/sandboxmatrix/internal/observability"
@@ -95,9 +96,23 @@ through this server instead of subprocess CLI calls.`,
 			server.ServerCommit = Commit
 			server.ServerBuildDate = BuildDate
 
+			// Initialize autoscaler if configured.
+			var as *autoscale.Autoscaler
+			if cfg.Autoscale.Enabled {
+				as = autoscale.New(rt, cfg.Autoscale)
+				as.Start(context.Background())
+				slog.Info("autoscaler enabled",
+					"interval", cfg.Autoscale.Interval,
+					"memoryHighWater", cfg.Autoscale.MemoryHighWater,
+				)
+			}
+
 			// Build server options.
 			serverOpts := []server.Option{
 				server.WithTeams(teams, qm),
+			}
+			if as != nil {
+				serverOpts = append(serverOpts, server.WithAutoscaler(as))
 			}
 
 			// Initialize OIDC if configured.
@@ -160,6 +175,10 @@ through this server instead of subprocess CLI calls.`,
 				defer cancel()
 				if err := srv.Shutdown(ctx); err != nil {
 					return fmt.Errorf("shutdown: %w", err)
+				}
+				// Stop autoscaler and restore sandbox resources.
+				if as != nil {
+					as.Stop(ctx)
 				}
 				// Flush any pending trace spans.
 				if err := tracingShutdown(ctx); err != nil {
