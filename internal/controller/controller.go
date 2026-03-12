@@ -2,15 +2,19 @@
 package controller
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	imagepkg "github.com/hg-dendi/sandboxmatrix/internal/image"
 	"github.com/hg-dendi/sandboxmatrix/internal/observability"
 	"github.com/hg-dendi/sandboxmatrix/internal/probe"
 	"github.com/hg-dendi/sandboxmatrix/internal/runtime"
@@ -18,6 +22,11 @@ import (
 	v1alpha1 "github.com/hg-dendi/sandboxmatrix/pkg/api/v1alpha1"
 	"github.com/hg-dendi/sandboxmatrix/pkg/blueprint"
 )
+
+// ImageChecker can check whether a pre-built image exists for a blueprint.
+type ImageChecker interface {
+	InspectImage(ctx context.Context, ref string) (string, error)
+}
 
 // Controller orchestrates sandbox lifecycle through runtime and state.
 type Controller struct {
@@ -127,10 +136,19 @@ func (c *Controller) Create(ctx context.Context, opts CreateOptions) (*v1alpha1.
 		slog.Warn("sandbox using host network mode", "name", opts.Name)
 	}
 
+	// Check for a cached pre-built image; use it to skip setup steps.
+	baseImage := bp.Spec.Base
+	usedCache := false
+	if cachedTag, ok := c.CachedImage(ctx, bp); ok {
+		slog.Info("using cached image", "name", opts.Name, "image", cachedTag)
+		baseImage = cachedTag
+		usedCache = true
+	}
+
 	// Build runtime config from blueprint.
 	cfg := &runtime.CreateConfig{
 		Name:   "smx-" + opts.Name,
-		Image:  bp.Spec.Base,
+		Image:  baseImage,
 		CPU:    bp.Spec.Resources.CPU,
 		Memory: bp.Spec.Resources.Memory,
 		Labels: map[string]string{
@@ -262,6 +280,31 @@ func (c *Controller) Create(ctx context.Context, opts CreateOptions) (*v1alpha1.
 	if err := c.startAndTrack(ctx, runtimeID, sb); err != nil {
 		recordOp("create", "error", start)
 		return nil, err
+	}
+
+	// Run setup commands if no cached image was used.
+	if !usedCache && len(bp.Spec.Setup) > 0 {
+		for i, step := range bp.Spec.Setup {
+			result, execErr := c.runtime.Exec(ctx, runtimeID, &runtime.ExecConfig{
+				Cmd: []string{"sh", "-c", step.Run},
+			})
+			if execErr != nil {
+				_ = c.runtime.Destroy(ctx, runtimeID)
+				sb.Status.State = v1alpha1.SandboxStateError
+				sb.Status.Message = fmt.Sprintf("setup step %d failed: %v", i+1, execErr)
+				_ = c.store.Save(sb)
+				recordOp("create", "error", start)
+				return nil, fmt.Errorf("setup step %d failed: %w", i+1, execErr)
+			}
+			if result.ExitCode != 0 {
+				_ = c.runtime.Destroy(ctx, runtimeID)
+				sb.Status.State = v1alpha1.SandboxStateError
+				sb.Status.Message = fmt.Sprintf("setup step %d exited with code %d: %s", i+1, result.ExitCode, step.Run)
+				_ = c.store.Save(sb)
+				recordOp("create", "error", start)
+				return nil, fmt.Errorf("setup step %d exited with code %d: %s", i+1, result.ExitCode, step.Run)
+			}
+		}
 	}
 
 	// Run readiness probe if configured.
@@ -596,4 +639,145 @@ func (c *Controller) List() ([]*v1alpha1.Sandbox, error) {
 // runner) to access low-level operations.
 func (c *Controller) Runtime() runtime.Runtime {
 	return c.runtime
+}
+
+// CachedImage checks if a pre-built image exists for this blueprint.
+// Returns the image tag and true if a cached image is found, or empty
+// string and false if not available.
+func (c *Controller) CachedImage(ctx context.Context, bp *v1alpha1.Blueprint) (string, bool) {
+	checker, ok := c.runtime.(ImageChecker)
+	if !ok {
+		return "", false
+	}
+
+	tag := imagepkg.Tag(bp)
+	imageID, err := checker.InspectImage(ctx, tag)
+	if err != nil || imageID == "" {
+		return "", false
+	}
+	return tag, true
+}
+
+// --------------------------------------------------------------------
+// File operations
+// --------------------------------------------------------------------
+
+// FileInfo holds metadata about a file inside a sandbox.
+type FileInfo struct {
+	Name    string `json:"name"`
+	Path    string `json:"path"`
+	Size    int64  `json:"size"`
+	IsDir   bool   `json:"isDir"`
+	ModTime string `json:"modTime"`
+}
+
+// validatePath checks that a file path is absolute and does not contain
+// directory traversal sequences.
+func validatePath(path string) error {
+	if path == "" {
+		return fmt.Errorf("path is required")
+	}
+	if !filepath.IsAbs(path) {
+		return fmt.Errorf("path must be absolute")
+	}
+	if strings.Contains(path, "..") {
+		return fmt.Errorf("path must not contain '..'")
+	}
+	return nil
+}
+
+// runningSandboxID returns the runtime ID of a running sandbox, or an error
+// if the sandbox does not exist or is not in a running/ready state.
+func (c *Controller) runningSandboxID(name string) (string, error) {
+	sb, err := c.store.Get(name)
+	if err != nil {
+		return "", err
+	}
+	if sb.Status.State != v1alpha1.SandboxStateRunning && sb.Status.State != v1alpha1.SandboxStateReady {
+		return "", fmt.Errorf("sandbox %q is not running (state: %s)", name, sb.Status.State)
+	}
+	return sb.Status.RuntimeID, nil
+}
+
+// WriteFile writes content to a file inside a sandbox.
+func (c *Controller) WriteFile(ctx context.Context, name, path string, content io.Reader) error {
+	if err := validatePath(path); err != nil {
+		return err
+	}
+	runtimeID, err := c.runningSandboxID(name)
+	if err != nil {
+		return err
+	}
+	return c.runtime.CopyToContainer(ctx, runtimeID, path, content)
+}
+
+// ReadFile reads a file from a sandbox.
+func (c *Controller) ReadFile(ctx context.Context, name, path string) (io.ReadCloser, error) {
+	if err := validatePath(path); err != nil {
+		return nil, err
+	}
+	runtimeID, err := c.runningSandboxID(name)
+	if err != nil {
+		return nil, err
+	}
+	return c.runtime.CopyFromContainer(ctx, runtimeID, path)
+}
+
+// ListFiles lists files in a directory inside a sandbox.
+func (c *Controller) ListFiles(ctx context.Context, name, path string) ([]FileInfo, error) {
+	if err := validatePath(path); err != nil {
+		return nil, err
+	}
+	runtimeID, err := c.runningSandboxID(name)
+	if err != nil {
+		return nil, err
+	}
+
+	// Use stat -c to get structured output for each entry.
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	result, err := c.runtime.Exec(ctx, runtimeID, &runtime.ExecConfig{
+		Cmd:    []string{"sh", "-c", fmt.Sprintf("stat -c '%%n\t%%s\t%%F\t%%Y' %s/* %s/.* 2>/dev/null || true", path, path)},
+		Stdout: stdout,
+		Stderr: stderr,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list files: %w", err)
+	}
+	if result.ExitCode != 0 {
+		return nil, fmt.Errorf("list files failed (exit %d): %s", result.ExitCode, stderr.String())
+	}
+
+	var files []FileInfo
+	for _, line := range strings.Split(stdout.String(), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		parts := strings.SplitN(line, "\t", 4)
+		if len(parts) < 4 {
+			continue
+		}
+
+		fname := filepath.Base(parts[0])
+		// Skip . and .. entries.
+		if fname == "." || fname == ".." {
+			continue
+		}
+
+		size, _ := strconv.ParseInt(parts[1], 10, 64)
+		isDir := strings.Contains(parts[2], "directory")
+
+		modEpoch, _ := strconv.ParseInt(parts[3], 10, 64)
+		modTime := time.Unix(modEpoch, 0).UTC().Format(time.RFC3339)
+
+		files = append(files, FileInfo{
+			Name:    fname,
+			Path:    filepath.Join(path, fname),
+			Size:    size,
+			IsDir:   isDir,
+			ModTime: modTime,
+		})
+	}
+	return files, nil
 }

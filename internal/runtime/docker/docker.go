@@ -2,10 +2,13 @@
 package docker
 
 import (
+	"archive/tar"
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -285,6 +288,19 @@ func (r *Runtime) Info(ctx context.Context, id string) (runtime.Info, error) {
 			info.IP = nw.IPAddress
 			break
 		}
+		// Populate port mappings from container inspection.
+		for port, bindings := range cj.NetworkSettings.Ports {
+			containerPort := port.Int()
+			proto := port.Proto()
+			for _, binding := range bindings {
+				hostPort, _ := strconv.Atoi(binding.HostPort)
+				info.Ports = append(info.Ports, runtime.PortMapping{
+					ContainerPort: containerPort,
+					HostPort:      hostPort,
+					Protocol:      proto,
+				})
+			}
+		}
 	}
 	return info, nil
 }
@@ -462,6 +478,104 @@ func (r *Runtime) CreateNetwork(ctx context.Context, name string, internal bool)
 func (r *Runtime) DeleteNetwork(ctx context.Context, name string) error {
 	if err := r.client.NetworkRemove(ctx, name); err != nil {
 		return fmt.Errorf("delete network %s: %w", name, err)
+	}
+	return nil
+}
+
+func (r *Runtime) CopyToContainer(ctx context.Context, id string, destPath string, content io.Reader) error {
+	dir := filepath.Dir(destPath)
+	name := filepath.Base(destPath)
+
+	data, err := io.ReadAll(content)
+	if err != nil {
+		return fmt.Errorf("read content: %w", err)
+	}
+
+	var buf bytes.Buffer
+	tw := tar.NewWriter(&buf)
+	if err := tw.WriteHeader(&tar.Header{
+		Name: name,
+		Mode: 0644,
+		Size: int64(len(data)),
+	}); err != nil {
+		return fmt.Errorf("write tar header: %w", err)
+	}
+	if _, err := tw.Write(data); err != nil {
+		return fmt.Errorf("write tar data: %w", err)
+	}
+	if err := tw.Close(); err != nil {
+		return fmt.Errorf("close tar writer: %w", err)
+	}
+
+	return r.client.CopyToContainer(ctx, id, dir, &buf, container.CopyToContainerOptions{})
+}
+
+func (r *Runtime) CopyFromContainer(ctx context.Context, id string, srcPath string) (io.ReadCloser, error) {
+	rc, _, err := r.client.CopyFromContainer(ctx, id, srcPath)
+	if err != nil {
+		return nil, fmt.Errorf("copy from container: %w", err)
+	}
+
+	tr := tar.NewReader(rc)
+	if _, err := tr.Next(); err != nil {
+		rc.Close()
+		return nil, fmt.Errorf("read tar entry: %w", err)
+	}
+
+	return &tarEntryReadCloser{reader: tr, closer: rc}, nil
+}
+
+// tarEntryReadCloser wraps a tar.Reader entry and the underlying io.ReadCloser.
+type tarEntryReadCloser struct {
+	reader io.Reader
+	closer io.Closer
+}
+
+func (t *tarEntryReadCloser) Read(p []byte) (int, error) {
+	return t.reader.Read(p)
+}
+
+func (t *tarEntryReadCloser) Close() error {
+	return t.closer.Close()
+}
+
+// CommitImage commits a container as an image with the given reference string.
+func (r *Runtime) CommitImage(ctx context.Context, containerID, reference string) (string, error) {
+	resp, err := r.client.ContainerCommit(ctx, containerID, container.CommitOptions{
+		Reference: reference,
+		Comment:   fmt.Sprintf("smx image build: %s", reference),
+		Pause:     true,
+	})
+	if err != nil {
+		return "", fmt.Errorf("commit container as image: %w", err)
+	}
+	return resp.ID, nil
+}
+
+// ListImages returns all Docker images matching the given reference prefix.
+func (r *Runtime) ListImages(ctx context.Context, refPrefix string) ([]image.Summary, error) {
+	f := filters.NewArgs()
+	f.Add("reference", refPrefix+"*")
+	return r.client.ImageList(ctx, image.ListOptions{Filters: f})
+}
+
+// InspectImage checks if an image exists locally and returns its ID.
+func (r *Runtime) InspectImage(ctx context.Context, ref string) (string, error) {
+	inspect, err := r.client.ImageInspect(ctx, ref)
+	if err != nil {
+		return "", err
+	}
+	return inspect.ID, nil
+}
+
+// RemoveImage removes a Docker image by reference.
+func (r *Runtime) RemoveImage(ctx context.Context, ref string) error {
+	_, err := r.client.ImageRemove(ctx, ref, image.RemoveOptions{
+		Force:         true,
+		PruneChildren: true,
+	})
+	if err != nil {
+		return fmt.Errorf("remove image: %w", err)
 	}
 	return nil
 }

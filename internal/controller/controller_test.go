@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -222,6 +223,14 @@ func (m *ctrlMockRuntime) DeleteNetwork(_ context.Context, name string) error {
 		delete(m.networks, name)
 	}
 	return nil
+}
+
+func (m *ctrlMockRuntime) CopyToContainer(_ context.Context, _ string, _ string, _ io.Reader) error {
+	return nil
+}
+
+func (m *ctrlMockRuntime) CopyFromContainer(_ context.Context, _ string, _ string) (io.ReadCloser, error) {
+	return nil, nil
 }
 
 // containerCount returns the number of containers tracked by the mock.

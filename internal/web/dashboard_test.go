@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"sync"
@@ -107,6 +108,14 @@ func (m *dashMockRuntime) DeleteSnapshot(_ context.Context, _ string) error { re
 func (m *dashMockRuntime) CreateNetwork(_ context.Context, _ string, _ bool) error { return nil }
 
 func (m *dashMockRuntime) DeleteNetwork(_ context.Context, _ string) error { return nil }
+
+func (m *dashMockRuntime) CopyToContainer(_ context.Context, _ string, _ string, _ io.Reader) error {
+	return nil
+}
+
+func (m *dashMockRuntime) CopyFromContainer(_ context.Context, _ string, _ string) (io.ReadCloser, error) {
+	return nil, nil
+}
 
 // ---------------------------------------------------------------------------
 // In-memory session store for dashboard tests.

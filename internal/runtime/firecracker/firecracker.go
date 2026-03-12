@@ -10,6 +10,7 @@ package firecracker
 import (
 	"context"
 	"fmt"
+	"io"
 
 	"github.com/hg-dendi/sandboxmatrix/internal/runtime"
 )
@@ -96,4 +97,14 @@ func (r *Runtime) CreateNetwork(_ context.Context, _ string, _ bool) error {
 // DeleteNetwork is not implemented.
 func (r *Runtime) DeleteNetwork(_ context.Context, _ string) error {
 	return ErrNotImplemented
+}
+
+// CopyToContainer is not implemented.
+func (r *Runtime) CopyToContainer(_ context.Context, _ string, _ string, _ io.Reader) error {
+	return ErrNotImplemented
+}
+
+// CopyFromContainer is not implemented.
+func (r *Runtime) CopyFromContainer(_ context.Context, _ string, _ string) (io.ReadCloser, error) {
+	return nil, ErrNotImplemented
 }

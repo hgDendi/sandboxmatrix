@@ -7,12 +7,15 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"strings"
 	"time"
 
 	"github.com/hg-dendi/sandboxmatrix/internal/agent/a2a"
 	"github.com/hg-dendi/sandboxmatrix/internal/aggregation"
 	"github.com/hg-dendi/sandboxmatrix/internal/controller"
+	imagepkg "github.com/hg-dendi/sandboxmatrix/internal/image"
+	"github.com/hg-dendi/sandboxmatrix/internal/interpreter"
 	"github.com/hg-dendi/sandboxmatrix/internal/runtime"
 	"github.com/hg-dendi/sandboxmatrix/internal/sharding"
 	v1alpha1 "github.com/hg-dendi/sandboxmatrix/pkg/api/v1alpha1"
@@ -247,6 +250,89 @@ func (s *Server) registerTools() {
 		s.handleMatrixCollectResults,
 	)
 
+	// sandbox_write_file
+	s.mcpServer.AddTool(
+		mcp.NewTool("sandbox_write_file",
+			mcp.WithDescription("Write content to a file in a sandbox"),
+			mcp.WithString("name",
+				mcp.Required(),
+				mcp.Description("Name of the sandbox"),
+			),
+			mcp.WithString("path",
+				mcp.Required(),
+				mcp.Description("Absolute path of the file inside the sandbox (e.g. /workspace/main.py)"),
+			),
+			mcp.WithString("content",
+				mcp.Required(),
+				mcp.Description("File content to write"),
+			),
+		),
+		s.handleSandboxWriteFile,
+	)
+
+	// sandbox_read_file
+	s.mcpServer.AddTool(
+		mcp.NewTool("sandbox_read_file",
+			mcp.WithDescription("Read content from a file in a sandbox"),
+			mcp.WithString("name",
+				mcp.Required(),
+				mcp.Description("Name of the sandbox"),
+			),
+			mcp.WithString("path",
+				mcp.Required(),
+				mcp.Description("Absolute path of the file inside the sandbox (e.g. /workspace/main.py)"),
+			),
+		),
+		s.handleSandboxReadFile,
+	)
+
+	// blueprint_build
+	s.mcpServer.AddTool(
+		mcp.NewTool("blueprint_build",
+			mcp.WithDescription("Build a Docker image from a blueprint for faster sandbox creation"),
+			mcp.WithString("blueprint",
+				mcp.Required(),
+				mcp.Description("Path to the blueprint YAML file"),
+			),
+		),
+		s.handleBlueprintBuild,
+	)
+
+	// sandbox_ports
+	s.mcpServer.AddTool(
+		mcp.NewTool("sandbox_ports",
+			mcp.WithDescription("List exposed ports and their host mappings for a sandbox"),
+			mcp.WithString("name",
+				mcp.Required(),
+				mcp.Description("Name of the sandbox to list ports for"),
+			),
+		),
+		s.handleSandboxPorts,
+	)
+
+	// code_interpret
+	s.mcpServer.AddTool(
+		mcp.NewTool("code_interpret",
+			mcp.WithDescription("Execute code in a sandbox and get structured output (stdout, stderr, exit code, output files)"),
+			mcp.WithString("sandbox",
+				mcp.Required(),
+				mcp.Description("Name of the sandbox to execute code in"),
+			),
+			mcp.WithString("language",
+				mcp.Required(),
+				mcp.Description("Programming language: python, javascript, bash, go, rust"),
+			),
+			mcp.WithString("code",
+				mcp.Required(),
+				mcp.Description("Source code to execute"),
+			),
+			mcp.WithString("timeout",
+				mcp.Description("Execution timeout in seconds (default: 30)"),
+			),
+		),
+		s.handleCodeInterpret,
+	)
+
 	// sandbox_ready_wait
 	s.mcpServer.AddTool(
 		mcp.NewTool("sandbox_ready_wait",
@@ -435,6 +521,188 @@ func (s *Server) handleSandboxStats(ctx context.Context, request mcp.CallToolReq
 
 	text := fmt.Sprintf("CPU:     %.1f%%\nMemory:  %.1f MiB / %.1f MiB (%.1f%%)", stats.CPUUsage, memUsageMiB, memLimitMiB, memPercent)
 	return mcp.NewToolResultText(text), nil
+}
+
+func (s *Server) handleCodeInterpret(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) { //nolint:gocritic // hugeParam: external library type with value receivers
+	args := request.GetArguments()
+
+	sandbox, _ := args["sandbox"].(string)
+	if sandbox == "" {
+		return mcp.NewToolResultError("parameter 'sandbox' is required"), nil
+	}
+	language, _ := args["language"].(string)
+	if language == "" {
+		return mcp.NewToolResultError("parameter 'language' is required"), nil
+	}
+	code, _ := args["code"].(string)
+	if code == "" {
+		return mcp.NewToolResultError("parameter 'code' is required"), nil
+	}
+
+	timeoutSec := 30
+	if t, ok := args["timeout"].(string); ok && t != "" {
+		_, _ = fmt.Sscanf(t, "%d", &timeoutSec)
+	}
+
+	interp := interpreter.New(s.ctrl)
+	result, err := interp.Execute(ctx, &interpreter.ExecuteRequest{
+		Sandbox:  sandbox,
+		Language: interpreter.Language(language),
+		Code:     code,
+		Timeout:  timeoutSec,
+	})
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("code execution failed: %v", err)), nil
+	}
+
+	// Format output for the AI agent.
+	var output strings.Builder
+	if result.Stdout != "" {
+		output.WriteString(result.Stdout)
+	}
+	if result.Stderr != "" {
+		if output.Len() > 0 {
+			output.WriteString("\n")
+		}
+		output.WriteString("[stderr]\n")
+		output.WriteString(result.Stderr)
+	}
+	if result.Error != "" {
+		if output.Len() > 0 {
+			output.WriteString("\n")
+		}
+		output.WriteString("[error] ")
+		output.WriteString(result.Error)
+	}
+	if result.ExitCode != 0 {
+		output.WriteString(fmt.Sprintf("\n[exit code: %d]", result.ExitCode))
+	}
+	output.WriteString(fmt.Sprintf("\n[duration: %s]", result.Duration))
+
+	if len(result.Files) > 0 {
+		output.WriteString(fmt.Sprintf("\n[output files: %d]", len(result.Files)))
+		for _, f := range result.Files {
+			output.WriteString(fmt.Sprintf("\n  - %s (%d bytes)", f.Name, f.Size))
+		}
+	}
+
+	return mcp.NewToolResultText(output.String()), nil
+}
+
+func (s *Server) handleSandboxPorts(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) { //nolint:gocritic // hugeParam: external library type with value receivers
+	args := request.GetArguments()
+
+	name, _ := args["name"].(string)
+	if name == "" {
+		return mcp.NewToolResultError("parameter 'name' is required"), nil
+	}
+
+	sb, err := s.ctrl.Get(name)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("failed to get sandbox: %v", err)), nil
+	}
+
+	if sb.Status.RuntimeID == "" {
+		return mcp.NewToolResultText("No ports mapped (sandbox has no runtime ID)."), nil
+	}
+
+	info, err := s.ctrl.Runtime().Info(ctx, sb.Status.RuntimeID)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("failed to inspect container: %v", err)), nil
+	}
+
+	if len(info.Ports) == 0 {
+		return mcp.NewToolResultText("No ports mapped."), nil
+	}
+
+	var buf strings.Builder
+	buf.WriteString(fmt.Sprintf("%-15s %-10s %-10s\n", "CONTAINER", "HOST", "PROTO"))
+	for _, p := range info.Ports {
+		proto := p.Protocol
+		if proto == "" {
+			proto = "tcp"
+		}
+		hostStr := "none"
+		if p.HostPort > 0 {
+			hostStr = fmt.Sprintf("%d", p.HostPort)
+		}
+		buf.WriteString(fmt.Sprintf("%-15d %-10s %-10s\n", p.ContainerPort, hostStr, proto))
+	}
+	return mcp.NewToolResultText(buf.String()), nil
+}
+
+// --- File tool handlers ---
+
+func (s *Server) handleSandboxWriteFile(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) { //nolint:gocritic // hugeParam: external library type with value receivers
+	args := request.GetArguments()
+
+	name, _ := args["name"].(string)
+	if name == "" {
+		return mcp.NewToolResultError("parameter 'name' is required"), nil
+	}
+
+	path, _ := args["path"].(string)
+	if path == "" {
+		return mcp.NewToolResultError("parameter 'path' is required"), nil
+	}
+
+	content, _ := args["content"].(string)
+
+	if err := s.ctrl.WriteFile(ctx, name, path, strings.NewReader(content)); err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("failed to write file: %v", err)), nil
+	}
+
+	return mcp.NewToolResultText(fmt.Sprintf("File written to %s in sandbox %q.", path, name)), nil
+}
+
+func (s *Server) handleSandboxReadFile(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) { //nolint:gocritic // hugeParam: external library type with value receivers
+	args := request.GetArguments()
+
+	name, _ := args["name"].(string)
+	if name == "" {
+		return mcp.NewToolResultError("parameter 'name' is required"), nil
+	}
+
+	path, _ := args["path"].(string)
+	if path == "" {
+		return mcp.NewToolResultError("parameter 'path' is required"), nil
+	}
+
+	rc, err := s.ctrl.ReadFile(ctx, name, path)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("failed to read file: %v", err)), nil
+	}
+	defer rc.Close()
+
+	buf := &mcpLimitedWriter{limit: 10 << 20}
+	if _, err := io.Copy(buf, rc); err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("failed to read file content: %v", err)), nil
+	}
+
+	return mcp.NewToolResultText(buf.buf.String()), nil
+}
+
+// --- Image build handler ---
+
+func (s *Server) handleBlueprintBuild(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) { //nolint:gocritic // hugeParam: external library type with value receivers
+	args := request.GetArguments()
+
+	blueprintPath, _ := args["blueprint"].(string)
+	if blueprintPath == "" {
+		return mcp.NewToolResultError("parameter 'blueprint' is required"), nil
+	}
+
+	builder := imagepkg.NewBuilder(s.ctrl.Runtime())
+	result, err := builder.Build(ctx, blueprintPath)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("failed to build image: %v", err)), nil
+	}
+
+	data, err := json.Marshal(result)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("failed to marshal result: %v", err)), nil
+	}
+	return mcp.NewToolResultText(string(data)), nil
 }
 
 // --- A2A tool handlers ---

@@ -69,6 +69,12 @@ func (m *mockRuntime) ListSnapshots(context.Context, string) ([]runtime.Snapshot
 func (m *mockRuntime) DeleteSnapshot(context.Context, string) error      { return nil }
 func (m *mockRuntime) CreateNetwork(context.Context, string, bool) error { return nil }
 func (m *mockRuntime) DeleteNetwork(context.Context, string) error       { return nil }
+func (m *mockRuntime) CopyToContainer(context.Context, string, string, io.Reader) error {
+	return nil
+}
+func (m *mockRuntime) CopyFromContainer(context.Context, string, string) (io.ReadCloser, error) {
+	return nil, nil
+}
 
 // ---------------------------------------------------------------------------
 // Tests

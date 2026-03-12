@@ -147,6 +147,14 @@ func (m *mockRuntime) DeleteNetwork(_ context.Context, _ string) error {
 	return nil
 }
 
+func (m *mockRuntime) CopyToContainer(_ context.Context, _ string, _ string, _ io.Reader) error {
+	return nil
+}
+
+func (m *mockRuntime) CopyFromContainer(_ context.Context, _ string, _ string) (io.ReadCloser, error) {
+	return nil, nil
+}
+
 // ---------------------------------------------------------------------------
 // In-memory session store
 // ---------------------------------------------------------------------------

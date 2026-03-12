@@ -82,8 +82,24 @@ func (s *Server) registerRoutes() {
 	s.router.HandleFunc("POST /api/v1/matrices/{name}/shard", handleShardTask(s.ctrl, s.gateway))
 	s.router.HandleFunc("POST /api/v1/matrices/{name}/collect", handleCollectResults(s.ctrl, s.gateway))
 
+	// File operations
+	s.router.HandleFunc("PUT /api/v1/sandboxes/{name}/files", handleUploadFile(s.ctrl))
+	s.router.HandleFunc("GET /api/v1/sandboxes/{name}/files", handleDownloadFile(s.ctrl))
+	s.router.HandleFunc("GET /api/v1/sandboxes/{name}/files/list", handleListFiles(s.ctrl))
+
 	// WebSocket streaming exec
 	s.router.HandleFunc("GET /api/v1/sandboxes/{name}/exec/stream", handleExecStream(s.ctrl))
+
+	// Network / Port forwarding
+	s.router.HandleFunc("GET /api/v1/sandboxes/{name}/ports", handleListPorts(s.ctrl))
+	s.router.HandleFunc("GET /api/v1/matrices/{name}/services", handleListMatrixServices(s.ctrl))
+
+	// Image building
+	s.router.HandleFunc("POST /api/v1/images/build", handleBuildImage(s.ctrl))
+	s.router.HandleFunc("GET /api/v1/images", handleListImages(s.ctrl))
+
+	// Code interpreter
+	s.router.HandleFunc("POST /api/v1/sandboxes/{name}/interpret", handleInterpret(s.ctrl))
 
 	// Session routes
 	s.router.HandleFunc("POST /api/v1/sessions", handleStartSession(s.ctrl))

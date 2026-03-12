@@ -3,6 +3,7 @@ package pool
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sync"
@@ -159,6 +160,14 @@ func (m *mockRuntime) CreateNetwork(_ context.Context, _ string, _ bool) error {
 
 func (m *mockRuntime) DeleteNetwork(_ context.Context, _ string) error {
 	return nil
+}
+
+func (m *mockRuntime) CopyToContainer(_ context.Context, _ string, _ string, _ io.Reader) error {
+	return nil
+}
+
+func (m *mockRuntime) CopyFromContainer(_ context.Context, _ string, _ string) (io.ReadCloser, error) {
+	return nil, nil
 }
 
 func (m *mockRuntime) containerCount() int {

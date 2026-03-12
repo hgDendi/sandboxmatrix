@@ -45,10 +45,12 @@ isolated development environments with pluggable runtime backends.`,
 	sessionCmd := newLazySessionCmd()
 	matrixCmd := newLazyMatrixCmd()
 	poolCmd := newPoolCmd()
+	imageCmd := newLazyImageCmd()
 	cmd.AddCommand(sandboxCmd)
 	cmd.AddCommand(sessionCmd)
 	cmd.AddCommand(matrixCmd)
 	cmd.AddCommand(poolCmd)
+	cmd.AddCommand(imageCmd)
 
 	return cmd
 }

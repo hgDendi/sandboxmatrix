@@ -148,4 +148,10 @@ type Runtime interface {
 
 	// DeleteNetwork removes a Docker network by name.
 	DeleteNetwork(ctx context.Context, name string) error
+
+	// CopyToContainer copies data from a reader into a file inside the container.
+	CopyToContainer(ctx context.Context, id string, destPath string, content io.Reader) error
+
+	// CopyFromContainer reads a file from inside the container.
+	CopyFromContainer(ctx context.Context, id string, srcPath string) (io.ReadCloser, error)
 }
