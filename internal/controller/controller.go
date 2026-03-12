@@ -14,14 +14,22 @@ import (
 	"sync"
 	"time"
 
+	"go.opentelemetry.io/otel/attribute"
+
 	imagepkg "github.com/hg-dendi/sandboxmatrix/internal/image"
 	"github.com/hg-dendi/sandboxmatrix/internal/observability"
 	"github.com/hg-dendi/sandboxmatrix/internal/probe"
+	"github.com/hg-dendi/sandboxmatrix/internal/quota"
 	"github.com/hg-dendi/sandboxmatrix/internal/runtime"
 	"github.com/hg-dendi/sandboxmatrix/internal/state"
 	v1alpha1 "github.com/hg-dendi/sandboxmatrix/pkg/api/v1alpha1"
 	"github.com/hg-dendi/sandboxmatrix/pkg/blueprint"
 )
+
+// QuotaChecker validates resource quotas before creating resources.
+type QuotaChecker interface {
+	CheckQuota(ctx context.Context, team string, request quota.QuotaRequest) error
+}
 
 // ImageChecker can check whether a pre-built image exists for a blueprint.
 type ImageChecker interface {
@@ -30,17 +38,30 @@ type ImageChecker interface {
 
 // Controller orchestrates sandbox lifecycle through runtime and state.
 type Controller struct {
-	mu       sync.Mutex
-	runtime  runtime.Runtime
-	store    state.Store
-	sessions state.SessionStore
-	matrices state.MatrixStore
+	mu           sync.Mutex
+	runtime      runtime.Runtime
+	store        state.Store
+	sessions     state.SessionStore
+	matrices     state.MatrixStore
+	quotaChecker QuotaChecker
+}
+
+// ControllerOption configures the Controller.
+type ControllerOption func(*Controller)
+
+// WithQuotaChecker sets the quota checker for the controller.
+func WithQuotaChecker(qc QuotaChecker) ControllerOption {
+	return func(c *Controller) { c.quotaChecker = qc }
 }
 
 // New creates a new Controller. The sessions and matrices parameters are
 // optional; if nil, the corresponding methods will return an error.
-func New(rt runtime.Runtime, store state.Store, sessions state.SessionStore, matrices state.MatrixStore) *Controller {
-	return &Controller{runtime: rt, store: store, sessions: sessions, matrices: matrices}
+func New(rt runtime.Runtime, store state.Store, sessions state.SessionStore, matrices state.MatrixStore, opts ...ControllerOption) *Controller {
+	c := &Controller{runtime: rt, store: store, sessions: sessions, matrices: matrices}
+	for _, o := range opts {
+		o(c)
+	}
+	return c
 }
 
 // CreateOptions holds options for creating a sandbox.
@@ -50,6 +71,7 @@ type CreateOptions struct {
 	WorkspaceDir  string
 	NetworkName   string            // optional: override network (e.g. for matrix isolation)
 	Env           map[string]string // optional: environment variables to inject (overrides blueprint env)
+	Team          string            // optional: team namespace for quota enforcement
 }
 
 // buildDeviceConfig converts blueprint device specs into runtime device mappings.
@@ -138,6 +160,12 @@ func (c *Controller) startAndTrack(ctx context.Context, runtimeID string, sb *v1
 
 // Create creates a new sandbox from a blueprint.
 func (c *Controller) Create(ctx context.Context, opts CreateOptions) (*v1alpha1.Sandbox, error) {
+	ctx, span := observability.StartSpan(ctx, "controller", "CreateSandbox",
+		attribute.String(observability.AttrSandboxName, opts.Name),
+		attribute.String(observability.AttrBlueprintName, opts.BlueprintPath),
+	)
+	defer span.End()
+
 	start := time.Now()
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -160,6 +188,25 @@ func (c *Controller) Create(ctx context.Context, opts CreateOptions) (*v1alpha1.
 	// Warn about host network mode.
 	if bp.Spec.Network.Policy == v1alpha1.NetworkPolicyHost {
 		slog.Warn("sandbox using host network mode", "name", opts.Name)
+	}
+
+	// Enforce team quota if configured.
+	if opts.Team != "" && c.quotaChecker != nil {
+		gpus := 0
+		if bp.Spec.Resources.GPU != nil {
+			gpus = bp.Spec.Resources.GPU.Count
+		}
+		qr := quota.QuotaRequest{
+			Sandboxes: 1,
+			CPU:       bp.Spec.Resources.CPU,
+			Memory:    bp.Spec.Resources.Memory,
+			Disk:      bp.Spec.Resources.Disk,
+			GPUs:      gpus,
+		}
+		if err := c.quotaChecker.CheckQuota(ctx, opts.Team, qr); err != nil {
+			recordOp("create", "error", start)
+			return nil, fmt.Errorf("quota check: %w", err)
+		}
 	}
 
 	// Check for a cached pre-built image; use it to skip setup steps.
@@ -288,6 +335,7 @@ func (c *Controller) Create(ctx context.Context, opts CreateOptions) (*v1alpha1.
 			BlueprintRef:  bp.Metadata.Name,
 			BlueprintPath: opts.BlueprintPath,
 			Resources:     bp.Spec.Resources,
+			Team:          opts.Team,
 		},
 		Status: v1alpha1.SandboxStatus{
 			State: v1alpha1.SandboxStateCreating,
@@ -380,6 +428,11 @@ func (c *Controller) Create(ctx context.Context, opts CreateOptions) (*v1alpha1.
 
 // Stop stops a running sandbox.
 func (c *Controller) Stop(ctx context.Context, name string) error {
+	ctx, span := observability.StartSpan(ctx, "controller", "StopSandbox",
+		attribute.String(observability.AttrSandboxName, name),
+	)
+	defer span.End()
+
 	start := time.Now()
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -416,6 +469,11 @@ func (c *Controller) Stop(ctx context.Context, name string) error {
 
 // Start starts a stopped sandbox.
 func (c *Controller) Start(ctx context.Context, name string) error {
+	ctx, span := observability.StartSpan(ctx, "controller", "StartSandbox",
+		attribute.String(observability.AttrSandboxName, name),
+	)
+	defer span.End()
+
 	start := time.Now()
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -453,6 +511,11 @@ func (c *Controller) Start(ctx context.Context, name string) error {
 
 // Destroy removes a sandbox and cleans up resources.
 func (c *Controller) Destroy(ctx context.Context, name string) error {
+	ctx, span := observability.StartSpan(ctx, "controller", "DestroySandbox",
+		attribute.String(observability.AttrSandboxName, name),
+	)
+	defer span.End()
+
 	start := time.Now()
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -482,6 +545,12 @@ func (c *Controller) Destroy(ctx context.Context, name string) error {
 
 // Exec executes a command in a running sandbox.
 func (c *Controller) Exec(ctx context.Context, name string, cfg *runtime.ExecConfig) (runtime.ExecResult, error) {
+	ctx, span := observability.StartSpan(ctx, "controller", "Exec",
+		attribute.String(observability.AttrSandboxName, name),
+		attribute.String(observability.AttrExecCommand, strings.Join(cfg.Cmd, " ")),
+	)
+	defer span.End()
+
 	start := time.Now()
 
 	sb, err := c.store.Get(name)
@@ -508,6 +577,11 @@ func (c *Controller) Exec(ctx context.Context, name string, cfg *runtime.ExecCon
 
 // Snapshot creates a point-in-time snapshot of a sandbox.
 func (c *Controller) Snapshot(ctx context.Context, name, tag string) (string, error) {
+	ctx, span := observability.StartSpan(ctx, "controller", "Snapshot",
+		attribute.String(observability.AttrSandboxName, name),
+	)
+	defer span.End()
+
 	start := time.Now()
 	sb, err := c.store.Get(name)
 	if err != nil {
@@ -532,6 +606,11 @@ func (c *Controller) Snapshot(ctx context.Context, name, tag string) (string, er
 
 // Restore creates a new sandbox from a snapshot.
 func (c *Controller) Restore(ctx context.Context, name, snapshotID, newName string) (*v1alpha1.Sandbox, error) {
+	ctx, span := observability.StartSpan(ctx, "controller", "Restore",
+		attribute.String(observability.AttrSandboxName, name),
+	)
+	defer span.End()
+
 	start := time.Now()
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -656,6 +735,11 @@ func (c *Controller) DeleteSnapshot(ctx context.Context, snapshotID string) erro
 
 // Stats returns resource usage statistics for a running sandbox.
 func (c *Controller) Stats(ctx context.Context, name string) (runtime.Stats, error) {
+	ctx, span := observability.StartSpan(ctx, "controller", "Stats",
+		attribute.String(observability.AttrSandboxName, name),
+	)
+	defer span.End()
+
 	sb, err := c.store.Get(name)
 	if err != nil {
 		return runtime.Stats{}, err

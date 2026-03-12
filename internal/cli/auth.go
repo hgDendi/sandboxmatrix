@@ -8,6 +8,7 @@ import (
 	"text/tabwriter"
 
 	"github.com/hg-dendi/sandboxmatrix/internal/auth"
+	"github.com/hg-dendi/sandboxmatrix/internal/config"
 	v1alpha1 "github.com/hg-dendi/sandboxmatrix/pkg/api/v1alpha1"
 	"github.com/spf13/cobra"
 )
@@ -119,6 +120,7 @@ func newAuthCmd() *cobra.Command {
 		newAuthListUsersCmd(),
 		newAuthRemoveUserCmd(),
 		newAuthAuditCmd(),
+		newAuthOIDCConfigCmd(),
 	)
 
 	return cmd
@@ -315,4 +317,101 @@ func splitLines(s string) []string {
 		lines = append(lines, s[start:])
 	}
 	return lines
+}
+
+// newAuthOIDCConfigCmd creates the "auth oidc-config" command.
+func newAuthOIDCConfigCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "oidc-config",
+		Short: "Show current OIDC authentication configuration status",
+		RunE: func(_ *cobra.Command, _ []string) error {
+			cfg, err := config.Load()
+			if err != nil {
+				return fmt.Errorf("load config: %w", err)
+			}
+
+			oidc := cfg.OIDC
+			jwt := cfg.JWT
+
+			fmt.Println("OIDC Configuration Status")
+			fmt.Println("=========================")
+			fmt.Println()
+
+			if !oidc.Enabled {
+				fmt.Println("OIDC:     disabled")
+				fmt.Println()
+				fmt.Println("To enable OIDC, add the following to your config file (~/.sandboxmatrix/config.yaml):")
+				fmt.Println()
+				fmt.Println("  oidc:")
+				fmt.Println("    enabled: true")
+				fmt.Println("    provider: google  # or github, oidc")
+				fmt.Println("    clientId: <your-client-id>")
+				fmt.Println("    clientSecret: <your-client-secret>")
+				fmt.Println("    redirectUrl: http://localhost:8080/api/v1/auth/oidc/callback")
+				return nil
+			}
+
+			fmt.Printf("OIDC:     enabled\n")
+			fmt.Printf("Provider: %s\n", oidc.Provider)
+			if oidc.Issuer != "" {
+				fmt.Printf("Issuer:   %s\n", oidc.Issuer)
+			}
+
+			// Show client ID (masked).
+			if oidc.ClientID != "" {
+				masked := oidc.ClientID
+				if len(masked) > 8 {
+					masked = masked[:4] + "..." + masked[len(masked)-4:]
+				}
+				fmt.Printf("ClientID: %s\n", masked)
+			} else {
+				fmt.Println("ClientID: (not set)")
+			}
+
+			if oidc.ClientSecret != "" {
+				fmt.Println("Secret:   (set)")
+			} else {
+				fmt.Println("Secret:   (not set)")
+			}
+
+			fmt.Printf("Redirect: %s\n", oidc.RedirectURL)
+
+			if len(oidc.Scopes) > 0 {
+				fmt.Printf("Scopes:   %v\n", oidc.Scopes)
+			}
+
+			if len(oidc.RoleMapping) > 0 {
+				fmt.Println("Role Mapping:")
+				for group, role := range oidc.RoleMapping {
+					fmt.Printf("  %s -> %s\n", group, role)
+				}
+			}
+
+			fmt.Println()
+			fmt.Println("JWT Configuration")
+			fmt.Println("-----------------")
+			if jwt.SigningKey != "" {
+				fmt.Println("SigningKey:      (set)")
+			} else {
+				fmt.Println("SigningKey:      (auto-generated)")
+			}
+			if jwt.Issuer != "" {
+				fmt.Printf("Issuer:          %s\n", jwt.Issuer)
+			} else {
+				fmt.Println("Issuer:          sandboxmatrix (default)")
+			}
+			ttl := jwt.AccessTokenTTL
+			if ttl == "" {
+				ttl = "1h (default)"
+			}
+			fmt.Printf("AccessTokenTTL:  %s\n", ttl)
+			rttl := jwt.RefreshTokenTTL
+			if rttl == "" {
+				rttl = "168h (default)"
+			}
+			fmt.Printf("RefreshTokenTTL: %s\n", rttl)
+
+			return nil
+		},
+	}
 }

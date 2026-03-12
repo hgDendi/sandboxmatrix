@@ -31,12 +31,17 @@ AI coding agents need isolated, reproducible environments to safely execute code
 | Snapshot/restore | ✅ | ❌ | ❌ | ❌ | ✅ |
 | GPU passthrough | ❌ | ✅ | ❌ | ❌ | ✅ |
 | Pluggable runtimes | ❌ | ❌ | ❌ | ❌ | ✅ Docker/gVisor/Firecracker |
-| REST API + Web Dashboard | ✅ | ✅ | ✅ | ❌ | ✅ 30+ endpoints |
+| REST API + Web Dashboard | ✅ | ✅ | ✅ | ❌ | ✅ 40+ endpoints |
 | SDKs | Python/TS | Python | ❌ | ❌ | ✅ Go/Python/TS |
 | Pre-warmed pools | ✅ | ✅ | ❌ | ❌ | ✅ |
 | RBAC + Audit logging | ✅ | ✅ | ❌ | ❌ | ✅ |
 | WebSocket exec streaming | ❌ | ❌ | ❌ | ❌ | ✅ |
 | Prometheus metrics | ❌ | ✅ | ❌ | ❌ | ✅ |
+| SSO/OIDC authentication | ❌ | ❌ | ❌ | ❌ | ✅ Google/GitHub/OIDC |
+| Team namespaces | ❌ | ❌ | ❌ | ❌ | ✅ |
+| Resource quotas | ❌ | ❌ | ❌ | ❌ | ✅ CPU/mem/GPU/count |
+| Distributed tracing | ❌ | ❌ | ❌ | ❌ | ✅ OpenTelemetry |
+| Grafana dashboards | ❌ | ✅ | ❌ | ❌ | ✅ 3 built-in |
 | K8s Operator + Helm | ❌ | ❌ | ❌ | ❌ | ✅ |
 | Distributed state (etcd) | ➖ | ➖ | ❌ | ❌ | ✅ |
 
@@ -56,8 +61,12 @@ CRI (containerd)   ->     Runtime Interface (Docker/gVisor/Firecracker)
 Helm Chart         ->     Blueprint (with extends inheritance)
 ConfigMap/Secret   ->     Blueprint env/secrets
 RBAC               ->     RBAC (admin/operator/viewer)
+OIDC/SSO           ->     SSO (Google/GitHub/OIDC)
+Namespace Quotas   ->     Team Quotas (CPU/mem/GPU/count)
 etcd               ->     etcd (distributed state)
 CRD + Operator     ->     CRD + Operator
+OpenTelemetry      ->     Distributed Tracing (OTLP)
+Grafana            ->     Grafana Dashboards (3 built-in)
 Readiness Probe    ->     Readiness Probe (exec/HTTP/TCP)
 Device Plugin      ->     Device Passthrough (/dev/kvm, /dev/dri)
 Job Parallelism    ->     Task Sharding (round-robin/hash/balanced)
@@ -98,14 +107,17 @@ Job Parallelism    ->     Task Sharding (round-robin/hash/balanced)
 - **Session management** -- bounded execution contexts for agent workflows with exec tracking
 
 ### Platform
-- **REST API server** -- 30+ JSON endpoints for programmatic access
+- **REST API server** -- 40+ JSON endpoints for programmatic access
 - **Web dashboard** -- real-time dark-theme management UI with terminal
 - **SDKs** -- Go, Python, and TypeScript clients with full API coverage
 - **WebSocket exec streaming** -- real-time stdout/stderr streaming with stdin support
 - **Pre-warmed pools** -- instant sandbox creation from pre-warmed container pools
 - **RBAC** -- role-based access control (admin/operator/viewer) with token auth
+- **SSO/OIDC authentication** -- Google, GitHub, and generic OIDC IdP support with JWT tokens and auto user creation
+- **Team namespaces + resource quotas** -- teams with members, per-team limits on CPU, memory, GPU, sandbox/matrix counts
 - **Audit logging** -- every action recorded with user, resource, and result
-- **Observability** -- structured logging (slog/JSON), Prometheus metrics
+- **Observability** -- structured logging (slog/JSON), Prometheus metrics, OpenTelemetry distributed tracing
+- **Grafana dashboards** -- 3 ready-to-import dashboards (Overview, Performance, Resources) with provisioning config
 - **Persistent state** -- file-based JSON, BoltDB, or etcd for distributed deployments
 - **Pluggable runtimes** -- Docker, gVisor, Firecracker backends
 - **Kubernetes operator** -- CRDs for Sandbox/Matrix/Blueprint with Helm chart
@@ -122,7 +134,8 @@ Job Parallelism    ->     Task Sharding (round-robin/hash/balanced)
 |  LangChain Adapter      |  CrewAI Adapter                            |
 +----------------------------------------------------------------------+
 |                        Control Plane                                  |
-|  API Server  |  Scheduler  |  Pool Manager  |  RBAC + Audit + Metrics|
+|  API Server  |  Scheduler  |  Pool Manager  |  RBAC + SSO/OIDC       |
+|  Team Quotas |  Audit Log  |  Metrics       |  OpenTelemetry Tracing |
 +----------------------------------------------------------------------+
 |                        Orchestration Plane                            |
 |  Readiness Probes  |  Task Sharding  |  Result Aggregation           |
@@ -211,6 +224,24 @@ curl "http://localhost:8080/api/v1/sandboxes/my-sandbox/files?path=/workspace/ma
 # List files
 curl "http://localhost:8080/api/v1/sandboxes/my-sandbox/files/list?path=/workspace"
 ```
+
+### Authentication & Team API routes
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/v1/auth/oidc/login` | OIDC login redirect |
+| `GET` | `/api/v1/auth/oidc/callback` | OIDC callback |
+| `POST` | `/api/v1/auth/token/refresh` | Refresh JWT token |
+| `GET` | `/api/v1/auth/userinfo` | Current user info |
+| `POST` | `/api/v1/teams` | Create team |
+| `GET` | `/api/v1/teams` | List teams |
+| `GET` | `/api/v1/teams/{name}` | Get team |
+| `PUT` | `/api/v1/teams/{name}` | Update team |
+| `DELETE` | `/api/v1/teams/{name}` | Delete team |
+| `GET` | `/api/v1/teams/{name}/usage` | Team resource usage |
+| `GET` | `/api/v1/teams/{name}/members` | List members |
+| `POST` | `/api/v1/teams/{name}/members` | Add member |
+| `DELETE` | `/api/v1/teams/{name}/members/{user}` | Remove member |
 
 > **More examples:** [API Reference](docs/api-reference.md) | [SDK Guide](docs/sdk-guide.md) | [Deployment Guide](docs/deployment.md)
 
@@ -346,11 +377,19 @@ agent = Agent(tools=[exec_tool, code_tool], ...)
 | `smx server start` | | Start the REST API server |
 | `smx dashboard` | | Start the web dashboard |
 | `smx mcp serve` | | Start the MCP server (stdio) |
+| **Team** | | |
+| `smx team create <name>` | | Create a team with optional quota flags |
+| `smx team list` | `team ls` | List all teams |
+| `smx team inspect <name>` | | Show team info and current resource usage |
+| `smx team add-member <team> <user>` | | Add a member with `--role` |
+| `smx team remove-member <team> <user>` | | Remove a member from the team |
+| `smx team set-quota <name>` | | Update team resource quotas |
 | **Auth** | | |
 | `smx auth add-user <name>` | | Add user with role and generate token |
 | `smx auth list-users` | | List all users |
 | `smx auth remove-user <name>` | | Remove a user |
 | `smx auth audit` | | View audit log |
+| `smx auth oidc-config` | | Show or configure OIDC settings |
 | **Config** | | |
 | `smx config show` | | Display current configuration |
 | `smx config set <key> <value>` | | Set a configuration value |
@@ -582,6 +621,55 @@ Protocol:
 4. Client can send stdin: `{"type":"stdin","data":"..."}`
 5. On completion: `{"type":"exit","exitCode":0}`
 
+## SSO/OIDC Authentication
+
+sandboxMatrix supports SSO via Google, GitHub, and any generic OIDC identity provider. Users are auto-created on first login with configurable role mapping from IdP groups.
+
+```yaml
+# ~/.sandboxmatrix/config.yaml
+oidc:
+  enabled: true
+  provider: "google"  # or "github", "oidc"
+  issuer: "https://accounts.google.com"
+  clientId: "your-client-id"
+  clientSecret: "your-secret"
+  redirectUrl: "http://localhost:8080/api/v1/auth/oidc/callback"
+  scopes: ["openid", "email", "profile"]
+  roleMapping:
+    "engineering": "operator"
+    "platform-team": "admin"
+
+jwt:
+  signingKey: "your-secret-key"
+  issuer: "sandboxmatrix"
+  accessTokenTtl: "1h"
+  refreshTokenTtl: "168h"
+```
+
+## Team Namespaces + Resource Quotas
+
+Organize users into teams with per-team resource limits. Quota enforcement is applied on sandbox/matrix creation.
+
+### CLI
+
+```bash
+smx team create ml-team --quota-sandboxes=20 --quota-cpu=32 --quota-memory=64G
+smx team add-member ml-team alice --role=operator
+smx team inspect ml-team  # shows team info + current usage
+```
+
+### API
+
+```bash
+# Create team
+curl -X POST http://localhost:8080/api/v1/teams \
+  -d '{"name":"ml-team","quota":{"maxSandboxes":20,"maxCpu":"32","maxMemory":"64G"}}'
+
+# Create sandbox with team
+curl -X POST http://localhost:8080/api/v1/sandboxes \
+  -d '{"name":"my-sandbox","blueprint":"base-python.yaml","team":"ml-team"}'
+```
+
 ## Observability
 
 ### Prometheus Metrics
@@ -599,6 +687,38 @@ The REST API server exposes Prometheus metrics at `GET /metrics`:
 | `smx_http_requests_total` | Counter | HTTP API requests by method, path, status |
 | `smx_http_request_duration_seconds` | Histogram | HTTP request duration |
 | `smx_websocket_connections` | Gauge | Active WebSocket connections |
+
+### OpenTelemetry Distributed Tracing
+
+sandboxMatrix supports full distributed tracing via OpenTelemetry with OTLP export (HTTP and gRPC). Spans are emitted for controller operations, Docker runtime calls, and HTTP handlers.
+
+```yaml
+# ~/.sandboxmatrix/config.yaml
+tracing:
+  enabled: true
+  endpoint: "localhost:4318"
+  protocol: "http"  # or "grpc"
+  serviceName: "sandboxmatrix"
+  sampleRate: 1.0
+```
+
+### Grafana Dashboards
+
+Three ready-to-import dashboards are included in `deploy/grafana/dashboards/`:
+
+| Dashboard | Description |
+|---|---|
+| **Overview** | Sandbox counts, create/destroy rates, active sessions, error rates |
+| **Performance** | Operation latencies (p50/p95/p99), exec durations, API response times |
+| **Resources** | CPU/memory usage per sandbox, pool utilization, quota consumption |
+
+```bash
+# Copy dashboards to Grafana provisioning path
+cp -r deploy/grafana/dashboards/ /var/lib/grafana/dashboards/sandboxmatrix/
+cp deploy/grafana/provisioning/dashboards.yaml /etc/grafana/provisioning/dashboards/sandboxmatrix.yaml
+```
+
+Together, Prometheus metrics + OpenTelemetry traces + Grafana dashboards provide a complete observability stack.
 
 ### Structured Logging
 
@@ -653,7 +773,7 @@ spec:
 | Document | Description |
 |---|---|
 | [Architecture](docs/architecture.md) | System design, core components, data flow |
-| [API Reference](docs/api-reference.md) | All 30+ REST API endpoints with examples |
+| [API Reference](docs/api-reference.md) | All 40+ REST API endpoints with examples |
 | [Deployment Guide](docs/deployment.md) | Local, Docker, K8s deployment + monitoring |
 | [SDK Guide](docs/sdk-guide.md) | Go, Python & TypeScript SDK usage |
 

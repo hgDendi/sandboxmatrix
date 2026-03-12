@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/hg-dendi/sandboxmatrix/internal/observability"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // corsMiddleware adds CORS headers to every response so that web dashboards
@@ -53,13 +54,18 @@ func loggingMiddleware(next http.Handler) http.Handler {
 		next.ServeHTTP(lrw, r)
 		duration := time.Since(start)
 
-		slog.Info("http request",
+		// Include trace ID in the log entry when available.
+		logAttrs := []any{
 			"method", r.Method,
 			"path", r.URL.Path,
 			"status", lrw.statusCode,
 			"duration", duration,
 			"remote", r.RemoteAddr,
-		)
+		}
+		if spanCtx := trace.SpanFromContext(r.Context()).SpanContext(); spanCtx.HasTraceID() {
+			logAttrs = append(logAttrs, "traceID", spanCtx.TraceID().String())
+		}
+		slog.Info("http request", logAttrs...)
 
 		statusStr := strconv.Itoa(lrw.statusCode)
 		observability.Metrics.HTTPRequestsTotal.WithLabelValues(r.Method, r.URL.Path, statusStr).Inc()

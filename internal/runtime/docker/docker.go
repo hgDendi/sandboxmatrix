@@ -20,7 +20,9 @@ import (
 	"github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/docker/go-connections/nat"
+	"github.com/hg-dendi/sandboxmatrix/internal/observability"
 	"github.com/hg-dendi/sandboxmatrix/internal/runtime"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 const (
@@ -67,8 +69,15 @@ func NewWithOptions(opts ...Option) (*Runtime, error) {
 func (r *Runtime) Name() string { return "docker" }
 
 func (r *Runtime) Create(ctx context.Context, cfg *runtime.CreateConfig) (string, error) {
+	ctx, span := observability.StartSpan(ctx, "docker", "CreateContainer",
+		attribute.String("container.name", cfg.Name),
+		attribute.String("container.image", cfg.Image),
+	)
+	defer span.End()
+
 	// Ensure image exists locally; pull if not.
 	if err := r.ensureImage(ctx, cfg.Image); err != nil {
+		observability.RecordError(ctx, err)
 		return "", err
 	}
 
@@ -204,14 +213,20 @@ func (r *Runtime) Create(ctx context.Context, cfg *runtime.CreateConfig) (string
 }
 
 func (r *Runtime) Start(ctx context.Context, id string) error {
+	ctx, span := observability.StartSpan(ctx, "docker", "Start", attribute.String("container.id", id))
+	defer span.End()
 	return r.client.ContainerStart(ctx, id, container.StartOptions{})
 }
 
 func (r *Runtime) Stop(ctx context.Context, id string) error {
+	ctx, span := observability.StartSpan(ctx, "docker", "Stop", attribute.String("container.id", id))
+	defer span.End()
 	return r.client.ContainerStop(ctx, id, container.StopOptions{})
 }
 
 func (r *Runtime) Destroy(ctx context.Context, id string) error {
+	ctx, span := observability.StartSpan(ctx, "docker", "Destroy", attribute.String("container.id", id))
+	defer span.End()
 	return r.client.ContainerRemove(ctx, id, container.RemoveOptions{Force: true})
 }
 

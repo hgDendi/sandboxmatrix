@@ -137,6 +137,7 @@ type SandboxSpec struct {
 	BlueprintPath string        `json:"blueprintPath,omitempty" yaml:"blueprintPath,omitempty"` // original file path for restore
 	Resources     Resources     `json:"resources,omitempty" yaml:"resources,omitempty"`
 	Workspace     WorkspaceSpec `json:"workspace,omitempty" yaml:"workspace,omitempty"`
+	Team          string        `json:"team,omitempty" yaml:"team,omitempty"`
 }
 
 // SandboxStatus holds the observed state of a sandbox.
@@ -216,10 +217,16 @@ type TaskResult struct {
 	CompletedAt *time.Time `json:"completedAt,omitempty"`
 }
 
+// MatrixSpec holds desired state for a matrix.
+type MatrixSpec struct {
+	Team string `json:"team,omitempty" yaml:"team,omitempty"`
+}
+
 // Matrix represents a group of coordinated sandboxes.
 type Matrix struct {
 	TypeMeta    `json:",inline" yaml:",inline"`
 	Metadata    ObjectMeta         `json:"metadata" yaml:"metadata"`
+	Spec        MatrixSpec         `json:"spec,omitempty" yaml:"spec,omitempty"`
 	Members     []MatrixMember     `json:"members" yaml:"members"`
 	State       MatrixState        `json:"state" yaml:"state"`
 	Sharding    *ShardingConfig    `json:"sharding,omitempty" yaml:"sharding,omitempty"`
@@ -251,4 +258,41 @@ type AuditEntry struct {
 	Resource  string    `json:"resource"` // e.g., "sandbox/my-sandbox"
 	Result    string    `json:"result"`   // "success" or "denied" or "error"
 	Detail    string    `json:"detail,omitempty"`
+}
+
+// Team represents a group of users sharing a namespace.
+type Team struct {
+	Name        string        `json:"name" yaml:"name"`
+	DisplayName string        `json:"displayName,omitempty" yaml:"displayName,omitempty"`
+	Members     []TeamMember  `json:"members" yaml:"members"`
+	Quota       ResourceQuota `json:"quota" yaml:"quota"`
+	CreatedAt   time.Time     `json:"createdAt" yaml:"createdAt"`
+}
+
+// TeamMember is a user within a team.
+type TeamMember struct {
+	UserName string `json:"userName" yaml:"userName"`
+	Role     Role   `json:"role" yaml:"role"`
+}
+
+// ResourceQuota defines resource limits for a team.
+type ResourceQuota struct {
+	MaxSandboxes int    `json:"maxSandboxes" yaml:"maxSandboxes"`
+	MaxCPU       string `json:"maxCpu" yaml:"maxCpu"`
+	MaxMemory    string `json:"maxMemory" yaml:"maxMemory"`
+	MaxDisk      string `json:"maxDisk" yaml:"maxDisk"`
+	MaxGPUs      int    `json:"maxGpus" yaml:"maxGpus"`
+	MaxMatrices  int    `json:"maxMatrices" yaml:"maxMatrices"`
+	MaxSessions  int    `json:"maxSessions" yaml:"maxSessions"`
+}
+
+// ResourceUsage tracks current resource usage for a team.
+type ResourceUsage struct {
+	Sandboxes   int     `json:"sandboxes"`
+	CPUCores    float64 `json:"cpuCores"`
+	MemoryBytes int64   `json:"memoryBytes"`
+	DiskBytes   int64   `json:"diskBytes"`
+	GPUs        int     `json:"gpus"`
+	Matrices    int     `json:"matrices"`
+	Sessions    int     `json:"sessions"`
 }

@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/hg-dendi/sandboxmatrix/internal/observability"
 	"gopkg.in/yaml.v3"
 )
 
@@ -18,13 +19,36 @@ const (
 
 // Config holds the sandboxMatrix configuration.
 type Config struct {
-	DefaultRuntime string          `yaml:"defaultRuntime" json:"defaultRuntime"`
-	BlueprintDir   string          `yaml:"blueprintDir" json:"blueprintDir"`
-	StateDir       string          `yaml:"stateDir" json:"stateDir"`
-	LogLevel       string          `yaml:"logLevel" json:"logLevel"`
-	Server         ServerConfig    `yaml:"server" json:"server"`
-	Dashboard      DashboardConfig `yaml:"dashboard" json:"dashboard"`
-	Pool           PoolConfig      `yaml:"pool" json:"pool"`
+	DefaultRuntime string                      `yaml:"defaultRuntime" json:"defaultRuntime"`
+	BlueprintDir   string                      `yaml:"blueprintDir" json:"blueprintDir"`
+	StateDir       string                      `yaml:"stateDir" json:"stateDir"`
+	LogLevel       string                      `yaml:"logLevel" json:"logLevel"`
+	Server         ServerConfig                `yaml:"server" json:"server"`
+	Dashboard      DashboardConfig             `yaml:"dashboard" json:"dashboard"`
+	Pool           PoolConfig                  `yaml:"pool" json:"pool"`
+	OIDC           OIDCServerConfig            `yaml:"oidc" json:"oidc"`
+	JWT            JWTServerConfig             `yaml:"jwt" json:"jwt"`
+	Tracing        observability.TracingConfig `yaml:"tracing" json:"tracing"`
+}
+
+// OIDCServerConfig holds OIDC authentication configuration.
+type OIDCServerConfig struct {
+	Enabled      bool              `yaml:"enabled" json:"enabled"`
+	Provider     string            `yaml:"provider" json:"provider"`         // "google", "github", "oidc"
+	Issuer       string            `yaml:"issuer" json:"issuer"`             // OIDC issuer URL
+	ClientID     string            `yaml:"clientId" json:"clientId"`         // OAuth2 client ID
+	ClientSecret string            `yaml:"clientSecret" json:"clientSecret"` // OAuth2 client secret
+	RedirectURL  string            `yaml:"redirectUrl" json:"redirectUrl"`   // OAuth2 callback URL
+	Scopes       []string          `yaml:"scopes" json:"scopes"`             // OAuth2 scopes
+	RoleMapping  map[string]string `yaml:"roleMapping" json:"roleMapping"`   // OIDC group -> role
+}
+
+// JWTServerConfig holds JWT token configuration.
+type JWTServerConfig struct {
+	SigningKey      string `yaml:"signingKey" json:"signingKey"`           // HMAC-SHA256 signing key
+	Issuer          string `yaml:"issuer" json:"issuer"`                   // JWT issuer claim
+	AccessTokenTTL  string `yaml:"accessTokenTtl" json:"accessTokenTtl"`   // default "1h"
+	RefreshTokenTTL string `yaml:"refreshTokenTtl" json:"refreshTokenTtl"` // default "168h" (7 days)
 }
 
 // ServerConfig holds the API server configuration.
@@ -51,6 +75,13 @@ func DefaultConfig() *Config {
 		Server:         ServerConfig{Addr: ":8080"},
 		Dashboard:      DashboardConfig{Addr: ":9090"},
 		Pool:           PoolConfig{MinReady: 2, MaxSize: 5},
+		Tracing: observability.TracingConfig{
+			Enabled:     false,
+			Protocol:    "http",
+			ServiceName: "sandboxmatrix",
+			SampleRate:  1.0,
+			Endpoint:    "localhost:4318",
+		},
 	}
 }
 

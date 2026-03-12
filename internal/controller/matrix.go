@@ -5,6 +5,10 @@ import (
 	"fmt"
 	"time"
 
+	"go.opentelemetry.io/otel/attribute"
+
+	"github.com/hg-dendi/sandboxmatrix/internal/observability"
+	"github.com/hg-dendi/sandboxmatrix/internal/quota"
 	v1alpha1 "github.com/hg-dendi/sandboxmatrix/pkg/api/v1alpha1"
 )
 
@@ -13,19 +17,48 @@ func matrixNetworkName(matrixName string) string {
 	return "smx-matrix-" + matrixName
 }
 
+// CreateMatrixOptions holds options for creating a matrix.
+type CreateMatrixOptions struct {
+	Name    string
+	Members []v1alpha1.MatrixMember
+	Team    string // optional: team namespace for quota enforcement
+}
+
 // CreateMatrix creates a new matrix with the given members. Each member's
 // sandbox is created via the existing Create method, and the group is tracked
 // as a coordinated unit. An isolated Docker network is created so that all
 // member sandboxes can communicate with each other while being isolated from
 // external traffic.
-func (c *Controller) CreateMatrix(ctx context.Context, name string, members []v1alpha1.MatrixMember) (*v1alpha1.Matrix, error) {
+func (c *Controller) CreateMatrix(ctx context.Context, name string, members []v1alpha1.MatrixMember, opts ...CreateMatrixOptions) (*v1alpha1.Matrix, error) {
+	ctx, span := observability.StartSpan(ctx, "controller", "CreateMatrix",
+		attribute.String(observability.AttrMatrixName, name),
+	)
+	defer span.End()
+
 	if c.matrices == nil {
 		return nil, fmt.Errorf("matrix store not configured")
+	}
+
+	// Extract team from options if provided.
+	var team string
+	if len(opts) > 0 {
+		team = opts[0].Team
 	}
 
 	// Check for duplicate matrix name.
 	if _, err := c.matrices.Get(name); err == nil {
 		return nil, fmt.Errorf("matrix %q already exists", name)
+	}
+
+	// Enforce team quota if configured.
+	if team != "" && c.quotaChecker != nil {
+		qr := quota.QuotaRequest{
+			Matrices:  1,
+			Sandboxes: len(members),
+		}
+		if err := c.quotaChecker.CheckQuota(ctx, team, qr); err != nil {
+			return nil, fmt.Errorf("quota check: %w", err)
+		}
 	}
 
 	// Create an isolated network for this matrix.
@@ -42,6 +75,7 @@ func (c *Controller) CreateMatrix(ctx context.Context, name string, members []v1
 			CreatedAt: now,
 			UpdatedAt: now,
 		},
+		Spec:    v1alpha1.MatrixSpec{Team: team},
 		Members: members,
 		State:   v1alpha1.MatrixStateActive,
 	}
@@ -53,6 +87,7 @@ func (c *Controller) CreateMatrix(ctx context.Context, name string, members []v1
 			Name:          sandboxName,
 			BlueprintPath: member.Blueprint,
 			NetworkName:   netName,
+			Team:          team,
 		})
 		if err != nil {
 			// Best-effort cleanup: destroy already-created sandboxes.
@@ -78,6 +113,11 @@ func (c *Controller) CreateMatrix(ctx context.Context, name string, members []v1
 
 // StopMatrix stops all member sandboxes in a matrix.
 func (c *Controller) StopMatrix(ctx context.Context, name string) error {
+	ctx, span := observability.StartSpan(ctx, "controller", "StopMatrix",
+		attribute.String(observability.AttrMatrixName, name),
+	)
+	defer span.End()
+
 	if c.matrices == nil {
 		return fmt.Errorf("matrix store not configured")
 	}
@@ -111,6 +151,11 @@ func (c *Controller) StopMatrix(ctx context.Context, name string) error {
 
 // StartMatrix starts all member sandboxes in a stopped matrix.
 func (c *Controller) StartMatrix(ctx context.Context, name string) error {
+	ctx, span := observability.StartSpan(ctx, "controller", "StartMatrix",
+		attribute.String(observability.AttrMatrixName, name),
+	)
+	defer span.End()
+
 	if c.matrices == nil {
 		return fmt.Errorf("matrix store not configured")
 	}
@@ -145,6 +190,11 @@ func (c *Controller) StartMatrix(ctx context.Context, name string) error {
 // DestroyMatrix destroys all member sandboxes, removes the isolated network,
 // and deletes the matrix record.
 func (c *Controller) DestroyMatrix(ctx context.Context, name string) error {
+	ctx, span := observability.StartSpan(ctx, "controller", "DestroyMatrix",
+		attribute.String(observability.AttrMatrixName, name),
+	)
+	defer span.End()
+
 	if c.matrices == nil {
 		return fmt.Errorf("matrix store not configured")
 	}

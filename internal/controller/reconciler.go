@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/hg-dendi/sandboxmatrix/internal/observability"
 	"github.com/hg-dendi/sandboxmatrix/internal/runtime"
 	"github.com/hg-dendi/sandboxmatrix/internal/state"
 	v1alpha1 "github.com/hg-dendi/sandboxmatrix/pkg/api/v1alpha1"
@@ -89,5 +90,8 @@ func reconcile(ctx context.Context, rt runtime.Runtime, store state.Store) error
 // still present in the runtime. This should be called once during startup so
 // that sandboxes created in a previous CLI session are rediscovered.
 func (c *Controller) Reconcile(ctx context.Context) error {
+	ctx, span := observability.StartSpan(ctx, "controller", "Reconcile")
+	defer span.End()
+
 	return reconcile(ctx, c.runtime, c.store)
 }

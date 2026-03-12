@@ -100,10 +100,10 @@ func handleVersion(w http.ResponseWriter, _ *http.Request) {
 // --------------------------------------------------------------------
 
 type createSandboxRequest struct {
-	Name      string            `json:"name"`
-	Blueprint string            `json:"blueprint"`
-	Workspace string            `json:"workspace,omitempty"`
-	Env       map[string]string `json:"env,omitempty"`
+	Name      string `json:"name"`
+	Blueprint string `json:"blueprint"`
+	Workspace string `json:"workspace,omitempty"`
+	Team      string `json:"team,omitempty"`
 }
 
 func handleCreateSandbox(ctrl *controller.Controller) http.HandlerFunc {
@@ -125,7 +125,7 @@ func handleCreateSandbox(ctrl *controller.Controller) http.HandlerFunc {
 			Name:          req.Name,
 			BlueprintPath: req.Blueprint,
 			WorkspaceDir:  req.Workspace,
-			Env:           req.Env,
+			Team:          req.Team,
 		})
 		if err != nil {
 			errorResponse(w, http.StatusInternalServerError, "failed to create sandbox")
@@ -136,7 +136,7 @@ func handleCreateSandbox(ctrl *controller.Controller) http.HandlerFunc {
 }
 
 func handleListSandboxes(ctrl *controller.Controller) http.HandlerFunc {
-	return func(w http.ResponseWriter, _ *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
 		sandboxes, err := ctrl.List()
 		if err != nil {
 			errorResponse(w, http.StatusInternalServerError, err.Error())
@@ -145,6 +145,18 @@ func handleListSandboxes(ctrl *controller.Controller) http.HandlerFunc {
 		if sandboxes == nil {
 			sandboxes = []*v1alpha1.Sandbox{}
 		}
+
+		// Optional team filter.
+		if team := r.URL.Query().Get("team"); team != "" {
+			filtered := make([]*v1alpha1.Sandbox, 0)
+			for _, sb := range sandboxes {
+				if sb.Spec.Team == team {
+					filtered = append(filtered, sb)
+				}
+			}
+			sandboxes = filtered
+		}
+
 		jsonResponse(w, http.StatusOK, sandboxes)
 	}
 }
@@ -339,6 +351,7 @@ func handleListSnapshots(ctrl *controller.Controller) http.HandlerFunc {
 type createMatrixRequest struct {
 	Name    string                  `json:"name"`
 	Members []v1alpha1.MatrixMember `json:"members"`
+	Team    string                  `json:"team,omitempty"`
 }
 
 func handleCreateMatrix(ctrl *controller.Controller) http.HandlerFunc {
@@ -356,7 +369,7 @@ func handleCreateMatrix(ctrl *controller.Controller) http.HandlerFunc {
 			return
 		}
 
-		mx, err := ctrl.CreateMatrix(r.Context(), req.Name, req.Members)
+		mx, err := ctrl.CreateMatrix(r.Context(), req.Name, req.Members, controller.CreateMatrixOptions{Team: req.Team})
 		if err != nil {
 			errorResponse(w, http.StatusInternalServerError, err.Error())
 			return
@@ -366,7 +379,7 @@ func handleCreateMatrix(ctrl *controller.Controller) http.HandlerFunc {
 }
 
 func handleListMatrices(ctrl *controller.Controller) http.HandlerFunc {
-	return func(w http.ResponseWriter, _ *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
 		matrices, err := ctrl.ListMatrices()
 		if err != nil {
 			errorResponse(w, http.StatusInternalServerError, err.Error())
@@ -375,6 +388,18 @@ func handleListMatrices(ctrl *controller.Controller) http.HandlerFunc {
 		if matrices == nil {
 			matrices = []*v1alpha1.Matrix{}
 		}
+
+		// Optional team filter.
+		if team := r.URL.Query().Get("team"); team != "" {
+			filtered := make([]*v1alpha1.Matrix, 0)
+			for _, mx := range matrices {
+				if mx.Spec.Team == team {
+					filtered = append(filtered, mx)
+				}
+			}
+			matrices = filtered
+		}
+
 		jsonResponse(w, http.StatusOK, matrices)
 	}
 }
