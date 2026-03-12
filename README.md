@@ -6,7 +6,7 @@
 
 > **sandboxMatrix is to AI Agents what Kubernetes is to microservices.**
 
-Open-source, local-first AI sandbox orchestrator with pluggable isolation and MCP integration.
+Open-source, local-first AI sandbox orchestrator with pluggable isolation, MCP integration, and AI framework adapters.
 
 ## Why sandboxMatrix
 
@@ -16,16 +16,23 @@ AI coding agents need isolated, reproducible environments to safely execute code
 |---|:---:|:---:|:---:|:---:|:---:|
 | Open source | Partial | ❌ | ✅ | ✅ | ✅ |
 | Local-first | ❌ | ❌ | ❌ | ✅ | ✅ |
-| MCP integration | ✅ | ❌ | Partial | ❌ | ✅ 13 tools |
+| MCP integration | ✅ | ❌ | Partial | ❌ | ✅ 19 tools |
+| Code interpreter | ✅ | ❌ | ❌ | ❌ | ✅ 5 languages |
+| File upload/download API | ✅ | ❌ | ❌ | ❌ | ✅ |
+| LangChain / CrewAI adapters | ❌ | ❌ | ❌ | ❌ | ✅ |
 | Multi-sandbox orchestration | ❌ | ❌ | ❌ | ❌ | ✅ Matrix |
 | Agent-to-agent messaging | ❌ | ❌ | ❌ | ❌ | ✅ A2A Gateway |
 | Task sharding + aggregation | ❌ | ❌ | ❌ | ❌ | ✅ |
+| Blueprint inheritance | ❌ | ❌ | ❌ | ❌ | ✅ extends |
+| Env/Secrets injection | ✅ | ✅ | ❌ | ❌ | ✅ env/file/literal |
+| Image pre-building | ✅ | ✅ | ❌ | ❌ | ✅ |
 | Readiness probes | ❌ | ❌ | ❌ | ❌ | ✅ exec/HTTP/TCP |
 | Device passthrough | ❌ | ❌ | ❌ | ❌ | ✅ /dev/kvm, /dev/dri |
 | Snapshot/restore | ✅ | ❌ | ❌ | ❌ | ✅ |
 | GPU passthrough | ❌ | ✅ | ❌ | ❌ | ✅ |
 | Pluggable runtimes | ❌ | ❌ | ❌ | ❌ | ✅ Docker/gVisor/Firecracker |
-| REST API + Web Dashboard | ✅ | ✅ | ✅ | ❌ | ✅ |
+| REST API + Web Dashboard | ✅ | ✅ | ✅ | ❌ | ✅ 30+ endpoints |
+| SDKs | Python/TS | Python | ❌ | ❌ | ✅ Go/Python/TS |
 | Pre-warmed pools | ✅ | ✅ | ❌ | ❌ | ✅ |
 | RBAC + Audit logging | ✅ | ✅ | ❌ | ❌ | ✅ |
 | WebSocket exec streaming | ❌ | ❌ | ❌ | ❌ | ✅ |
@@ -46,7 +53,8 @@ Namespace          ->     Matrix
 PersistentVolume   ->     Workspace
 Job                ->     Session
 CRI (containerd)   ->     Runtime Interface (Docker/gVisor/Firecracker)
-Helm Chart         ->     Blueprint
+Helm Chart         ->     Blueprint (with extends inheritance)
+ConfigMap/Secret   ->     Blueprint env/secrets
 RBAC               ->     RBAC (admin/operator/viewer)
 etcd               ->     etcd (distributed state)
 CRD + Operator     ->     CRD + Operator
@@ -57,56 +65,77 @@ Job Parallelism    ->     Task Sharding (round-robin/hash/balanced)
 
 ## Features
 
+### Core Sandbox
 - **Docker sandbox lifecycle** -- create, start, stop, destroy, exec, and inspect containers
 - **Snapshot and restore** -- point-in-time snapshots via Docker commit with tag-based management
-- **Matrix orchestration** -- coordinate multiple sandboxes as a single unit with isolated networking
-- **MCP server** -- 13 built-in tools for AI agent integration over the Model Context Protocol (stdio)
-- **REST API server** -- 20+ JSON endpoints for programmatic access
-- **Web dashboard** -- real-time dark-theme management UI with auto-refresh
-- **Session management** -- bounded execution contexts for agent workflows with exec tracking
-- **A2A messaging** -- agent-to-agent send, receive, and broadcast gateway
-- **Pre-warmed pools** -- instant sandbox creation from pre-warmed container pools
-- **GPU passthrough** -- NVIDIA GPU support for AI workloads (PyTorch, CUDA)
-- **Device passthrough** -- pass host devices (`/dev/kvm`, `/dev/dri`, etc.) into sandboxes with optional mode
-- **Readiness probes** -- exec/HTTP/TCP probes to wait for sandbox readiness (K8s-style)
-- **Task sharding** -- distribute tasks across matrix members with round-robin, hash, or balanced strategies
-- **Result aggregation** -- collect and merge results from distributed matrix tasks
+- **File upload/download** -- read, write, and list files inside running sandboxes via Docker cp API
+- **Code interpreter** -- execute Python, JavaScript, Bash, Go, and Rust code with structured output
+- **Env/Secrets injection** -- blueprint-level env vars and secrets from host env, files, or literals
 - **Resource monitoring** -- live CPU and memory statistics per sandbox
-- **WebSocket exec streaming** -- real-time stdout/stderr streaming with stdin support for long-running commands
-- **Blueprint system** -- declarative YAML environment definitions with validation
-- **Pluggable runtime architecture** -- Docker, gVisor, Firecracker backends
+- **GPU passthrough** -- NVIDIA GPU support for AI workloads (PyTorch, CUDA)
+- **Device passthrough** -- pass host devices (`/dev/kvm`, `/dev/dri`, etc.) into sandboxes
+
+### Multi-Sandbox Orchestration
+- **Matrix orchestration** -- coordinate multiple sandboxes as a single unit with isolated networking
+- **A2A messaging** -- agent-to-agent send, receive, and broadcast gateway
+- **Task sharding** -- distribute tasks across matrix members (round-robin, hash, balanced)
+- **Result aggregation** -- collect and merge results from distributed matrix tasks
+- **Service discovery** -- `<member>.<matrix>.local` hostname resolution between matrix members
+- **Port forwarding** -- inspect and manage port mappings for sandbox services
+
+### Blueprint System
+- **Declarative YAML** -- define environments with base image, resources, setup, networking
+- **Blueprint inheritance** -- `extends` field for DRY configuration with multi-level support (max 5 depth)
+- **Image pre-building** -- bake blueprints into Docker images for instant sandbox creation
+- **Readiness probes** -- exec/HTTP/TCP probes to wait for sandbox readiness (K8s-style)
 - **Network policies** -- configurable per-blueprint (none, host, bridge, isolate)
+- **11 example blueprints** -- Python, Go, Node, Rust, GPU, Android, fullstack, data-science, web-api
+
+### AI Integration
+- **MCP server** -- 19 built-in tools for AI agent integration over Model Context Protocol (stdio)
+- **LangChain adapter** -- 4 tools (exec, write_file, read_file, code_interpreter) via `pip install sandboxmatrix[langchain]`
+- **CrewAI adapter** -- 4 tools with same capabilities via `pip install sandboxmatrix[crewai]`
+- **Session management** -- bounded execution contexts for agent workflows with exec tracking
+
+### Platform
+- **REST API server** -- 30+ JSON endpoints for programmatic access
+- **Web dashboard** -- real-time dark-theme management UI with terminal
+- **SDKs** -- Go, Python, and TypeScript clients with full API coverage
+- **WebSocket exec streaming** -- real-time stdout/stderr streaming with stdin support
+- **Pre-warmed pools** -- instant sandbox creation from pre-warmed container pools
 - **RBAC** -- role-based access control (admin/operator/viewer) with token auth
 - **Audit logging** -- every action recorded with user, resource, and result
-- **Observability** -- structured logging (slog/JSON), Prometheus metrics (`/metrics` endpoint)
+- **Observability** -- structured logging (slog/JSON), Prometheus metrics
 - **Persistent state** -- file-based JSON, BoltDB, or etcd for distributed deployments
+- **Pluggable runtimes** -- Docker, gVisor, Firecracker backends
 - **Kubernetes operator** -- CRDs for Sandbox/Matrix/Blueprint with Helm chart
-- **SDKs** -- Python and TypeScript clients for programmatic access
 
 ## Architecture
 
 ```
 +----------------------------------------------------------------------+
-|                        Interface Layer                                 |
+|                        Interface Layer                                |
 |  CLI (smx)  |  REST API  |  SDKs (Go/Python/TS)  |  Web Dashboard   |
 +----------------------------------------------------------------------+
-|                        Agent Plane                                     |
-|  MCP Server (13 tools)  |  A2A Gateway  |  Session Manager            |
+|                        Agent Plane                                    |
+|  MCP Server (19 tools)  |  A2A Gateway  |  Session Manager           |
+|  LangChain Adapter      |  CrewAI Adapter                            |
 +----------------------------------------------------------------------+
-|                        Control Plane                                   |
+|                        Control Plane                                  |
 |  API Server  |  Scheduler  |  Pool Manager  |  RBAC + Audit + Metrics|
 +----------------------------------------------------------------------+
-|                        Orchestration Plane                               |
-|  Readiness Probes  |  Task Sharding  |  Result Aggregation            |
+|                        Orchestration Plane                            |
+|  Readiness Probes  |  Task Sharding  |  Result Aggregation           |
+|  Service Discovery |  Port Forwarding |  Image Builder               |
 +----------------------------------------------------------------------+
-|                        Runtime Plane (pluggable)                       |
-|  Docker  |  Firecracker  |  gVisor  |  Kata  |  WASM                 |
+|                        Runtime Plane (pluggable)                      |
+|  Docker  |  Firecracker  |  gVisor  |  Kata  |  WASM                |
 +----------------------------------------------------------------------+
-|                        Storage Plane                                   |
-|  Workspaces  |  Snapshots  |  State (JSON / BoltDB / etcd)           |
+|                        Storage Plane                                  |
+|  Workspaces  |  Snapshots  |  State (JSON / BoltDB / etcd)          |
 +----------------------------------------------------------------------+
-|                        Deployment                                      |
-|  Single binary  |  K8s Operator + CRDs  |  Helm Chart                |
+|                        Deployment                                     |
+|  Single binary  |  K8s Operator + CRDs  |  Helm Chart               |
 +----------------------------------------------------------------------+
 ```
 
@@ -120,6 +149,9 @@ cd sandboxmatrix && make build
 # Create and use a sandbox
 ./bin/smx sandbox create -b blueprints/python-dev.yaml -n my-sandbox
 ./bin/smx sandbox exec my-sandbox -- python -c "print('hello from sandbox')"
+
+# Create with environment variables
+./bin/smx sandbox create -b blueprints/env-example.yaml -n my-app -e API_KEY=sk-xxx -e DEBUG=true
 
 # Snapshot and restore
 ./bin/smx sandbox snapshot my-sandbox --tag v1
@@ -138,6 +170,15 @@ cd sandboxmatrix && make build
 ./bin/smx dashboard --addr :9090     # Web dashboard with terminal
 ```
 
+### Image pre-building
+
+```bash
+# Build a blueprint into a cached Docker image (skip setup on future creates)
+./bin/smx image build -b blueprints/python-dev.yaml
+./bin/smx image list
+./bin/smx image clean
+```
+
 ### Matrix orchestration
 
 ```bash
@@ -148,14 +189,128 @@ cd sandboxmatrix && make build
 ./bin/smx matrix destroy fullstack
 ```
 
+### Code interpreter (via REST API)
+
+```bash
+curl -X POST http://localhost:8080/api/v1/sandboxes/my-sandbox/interpret \
+  -H "Content-Type: application/json" \
+  -d '{"language":"python","code":"import math; print(math.pi)"}'
+```
+
+### File operations (via REST API)
+
+```bash
+# Upload a file
+curl -X PUT "http://localhost:8080/api/v1/sandboxes/my-sandbox/files?path=/workspace/main.py" \
+  -H "Content-Type: application/octet-stream" \
+  --data-binary @main.py
+
+# Download a file
+curl "http://localhost:8080/api/v1/sandboxes/my-sandbox/files?path=/workspace/main.py"
+
+# List files
+curl "http://localhost:8080/api/v1/sandboxes/my-sandbox/files/list?path=/workspace"
+```
+
 > **More examples:** [API Reference](docs/api-reference.md) | [SDK Guide](docs/sdk-guide.md) | [Deployment Guide](docs/deployment.md)
+
+## SDK Usage
+
+### Go SDK
+
+```go
+import smx "github.com/hg-dendi/sandboxmatrix/sdk/go"
+
+client := smx.NewClient("http://localhost:8080")
+
+sb, _ := client.CreateSandbox(ctx, "my-sandbox", "blueprints/python-dev.yaml", "")
+result, _ := client.Exec(ctx, "my-sandbox", "python -c 'print(42)'")
+fmt.Println(result.Stdout)
+
+_ = client.WriteFile(ctx, "my-sandbox", "/workspace/hello.py", strings.NewReader("print('hi')"))
+data, _ := client.ReadFile(ctx, "my-sandbox", "/workspace/hello.py")
+
+_ = client.DestroySandbox(ctx, "my-sandbox")
+```
+
+### Python SDK
+
+```python
+from sandboxmatrix import HTTPClient
+
+client = HTTPClient("http://localhost:8080")
+
+sb = client.create_sandbox("my-sandbox", "blueprints/python-dev.yaml")
+result = client.exec("my-sandbox", "python -c 'print(42)'")
+print(result.stdout)
+
+# Code interpreter
+interp = client.interpret("my-sandbox", "python", "import math; print(math.pi)")
+print(interp.stdout)
+
+# File operations
+client.write_file("my-sandbox", "/workspace/hello.py", "print('hi')")
+content = client.read_file("my-sandbox", "/workspace/hello.py")
+files = client.list_files("my-sandbox", "/workspace")
+
+client.destroy_sandbox("my-sandbox")
+```
+
+### TypeScript SDK
+
+```typescript
+import { HTTPClient } from "@sandboxmatrix/sdk";
+
+const client = new HTTPClient({ baseURL: "http://localhost:8080" });
+
+const sb = await client.createSandbox("my-sandbox", "blueprints/python-dev.yaml");
+const result = await client.exec("my-sandbox", "python -c 'print(42)'");
+console.log(result.stdout);
+
+// Code interpreter
+const interp = await client.interpret("my-sandbox", "python", "import math; print(math.pi)");
+
+// File operations
+await client.writeFile("my-sandbox", "/workspace/hello.py", "print('hi')");
+const content = await client.readFile("my-sandbox", "/workspace/hello.py");
+const files = await client.listFiles("my-sandbox", "/workspace");
+
+await client.destroySandbox("my-sandbox");
+```
+
+### LangChain Integration
+
+```python
+# pip install sandboxmatrix[langchain]
+from sandboxmatrix.langchain_tools import create_sandbox_tools
+
+tools = create_sandbox_tools(sandbox_name="my-sandbox")
+# Returns: [SandboxExecTool, SandboxWriteFileTool, SandboxReadFileTool, CodeInterpreterTool]
+
+# Use with any LangChain agent
+from langchain.agents import create_react_agent
+agent = create_react_agent(llm, tools)
+```
+
+### CrewAI Integration
+
+```python
+# pip install sandboxmatrix[crewai]
+from sandboxmatrix.crewai_tools import SandboxExecTool, CodeInterpreterTool
+
+exec_tool = SandboxExecTool(sandbox_name="my-sandbox")
+code_tool = CodeInterpreterTool(sandbox_name="my-sandbox")
+
+agent = Agent(tools=[exec_tool, code_tool], ...)
+```
 
 ## CLI Reference
 
 | Command | Alias | Description |
 |---|---|---|
 | **Sandbox** | | |
-| `smx sandbox create` | `sb create` | Create and start a sandbox from a blueprint |
+| `smx sandbox create -b <bp> -n <name>` | `sb create` | Create and start a sandbox from a blueprint |
+| `smx sandbox create ... -e KEY=VAL` | | Create with environment variable injection |
 | `smx sandbox list` | `sb ls` | List all sandboxes |
 | `smx sandbox start <name>` | | Start a stopped sandbox |
 | `smx sandbox stop <name>` | | Stop a running sandbox |
@@ -167,6 +322,10 @@ cd sandboxmatrix && make build
 | `smx sandbox snapshots <name>` | | List snapshots |
 | `smx sandbox restore <name>` | | Restore from a snapshot |
 | `smx sandbox gpu-check <name>` | | Check GPU availability (nvidia-smi) |
+| **Image** | | |
+| `smx image build -b <blueprint>` | | Build a cached Docker image from a blueprint |
+| `smx image list` | `image ls` | List all pre-built images |
+| `smx image clean` | | Remove all pre-built images |
 | **Matrix** | | |
 | `smx matrix create <name>` | `mx create` | Create a multi-sandbox matrix |
 | `smx matrix list` | `mx ls` | List all matrices |
@@ -209,11 +368,11 @@ cd sandboxmatrix && make build
 
 ## MCP Tools
 
-The MCP server (`smx mcp serve`) exposes 13 tools over stdio for AI agent integration:
+The MCP server (`smx mcp serve`) exposes 19 tools over stdio for AI agent integration:
 
 | Tool | Description |
 |---|---|
-| `sandbox_create` | Create a new sandbox from a blueprint |
+| `sandbox_create` | Create a new sandbox from a blueprint (supports env vars) |
 | `sandbox_list` | List all sandboxes |
 | `sandbox_exec` | Execute a command in a running sandbox (via `sh -c`) |
 | `sandbox_start` | Start a stopped sandbox |
@@ -221,6 +380,11 @@ The MCP server (`smx mcp serve`) exposes 13 tools over stdio for AI agent integr
 | `sandbox_destroy` | Destroy a sandbox and clean up resources |
 | `sandbox_stats` | Get CPU/memory statistics for a running sandbox |
 | `sandbox_ready_wait` | Wait for a sandbox to pass its readiness probe |
+| `sandbox_write_file` | Write content to a file inside a sandbox |
+| `sandbox_read_file` | Read content from a file inside a sandbox |
+| `sandbox_ports` | List exposed ports and host mappings for a sandbox |
+| `code_interpret` | Execute code (Python/JS/Bash/Go/Rust) with structured output |
+| `blueprint_build` | Build a Docker image from a blueprint for faster creation |
 | `a2a_send` | Send a message from one sandbox to another |
 | `a2a_receive` | Receive pending messages for a sandbox (clears inbox) |
 | `a2a_broadcast` | Broadcast a message to multiple sandboxes |
@@ -240,6 +404,167 @@ Add to your AI agent's MCP config (e.g., Claude Code, Claude Desktop):
     }
   }
 }
+```
+
+## Blueprint System
+
+### Basic blueprint
+
+```yaml
+apiVersion: smx/v1alpha1
+kind: Blueprint
+metadata:
+  name: python-dev
+  version: "1.0.0"
+spec:
+  base: python:3.12-slim
+  runtime: docker
+  resources:
+    cpu: "2"
+    memory: 2Gi
+  setup:
+    - run: pip install poetry ruff mypy
+  workspace:
+    mountPath: /workspace
+  network:
+    expose: [8000]
+```
+
+### Blueprint with env/secrets
+
+```yaml
+apiVersion: smx/v1alpha1
+kind: Blueprint
+metadata:
+  name: web-service
+  version: "1.0.0"
+spec:
+  base: python:3.12-slim
+  runtime: docker
+  env:
+    APP_ENV: production
+    LOG_LEVEL: info
+  secrets:
+    - name: DATABASE_URL
+      source: env:DATABASE_URL        # from host env var
+    - name: API_KEY
+      source: file:/run/secrets/key   # from file
+    - name: DEBUG
+      source: "false"                 # literal value
+  setup:
+    - run: pip install flask
+  workspace:
+    mountPath: /workspace
+  network:
+    policy: bridge
+    expose: [5000]
+```
+
+### Blueprint inheritance
+
+```yaml
+# base-python.yaml -- shared base
+apiVersion: smx/v1alpha1
+kind: Blueprint
+metadata:
+  name: base-python
+  version: "1.0"
+spec:
+  base: python:3.12-slim
+  runtime: docker
+  resources:
+    cpu: "1"
+    memory: 512Mi
+  env:
+    PYTHONDONTWRITEBYTECODE: "1"
+  setup:
+    - run: pip install --upgrade pip
+  workspace:
+    mountPath: /workspace
+  network:
+    policy: bridge
+```
+
+```yaml
+# data-science.yaml -- inherits from base, adds packages and memory
+apiVersion: smx/v1alpha1
+kind: Blueprint
+metadata:
+  name: data-science
+  version: "1.0"
+spec:
+  extends: base-python.yaml
+  resources:
+    memory: 2Gi
+  setup:
+    - run: pip install pandas numpy matplotlib scikit-learn jupyter
+  env:
+    JUPYTER_PORT: "8888"
+  network:
+    policy: bridge
+    expose: [8888]
+```
+
+Inheritance rules:
+- **Scalars** (base, runtime, workspace, readinessProbe): child wins if set
+- **Resources**: child wins per-field (CPU, Memory, Disk, GPU independently)
+- **Lists** (setup, toolchains, devices, secrets): child's entries appended to parent's
+- **Maps** (env): merged, child wins on key conflicts
+- **Max depth**: 5 levels to prevent circular references
+
+### GPU-enabled blueprint
+
+```yaml
+apiVersion: smx/v1alpha1
+kind: Blueprint
+metadata:
+  name: gpu-python-dev
+  version: "1.0.0"
+spec:
+  base: nvidia/cuda:12.4.1-runtime-ubuntu22.04
+  runtime: docker
+  resources:
+    cpu: "4"
+    memory: 8Gi
+    gpu:
+      count: 1
+      driver: nvidia
+  setup:
+    - run: pip3 install torch torchvision
+  workspace:
+    mountPath: /workspace
+```
+
+### Device passthrough with readiness probe
+
+```yaml
+apiVersion: smx/v1alpha1
+kind: Blueprint
+metadata:
+  name: android-emulator
+  version: "1.0.0"
+spec:
+  base: budtmo/docker-android:emulator_14.0
+  runtime: docker
+  resources:
+    cpu: "4"
+    memory: 8Gi
+  devices:
+    - hostPath: /dev/kvm
+      permissions: "rw"
+    - hostPath: /dev/dri
+      permissions: "rw"
+      optional: true
+  readinessProbe:
+    type: exec
+    command: ["adb", "shell", "getprop", "sys.boot_completed"]
+    initialDelaySec: 10
+    periodSec: 3
+    timeoutSec: 5
+    successThreshold: 1
+    failureThreshold: 40
+  network:
+    expose: [5554, 5555]
 ```
 
 ## WebSocket Exec Streaming
@@ -278,103 +603,6 @@ The REST API server exposes Prometheus metrics at `GET /metrics`:
 ### Structured Logging
 
 All components use Go's `log/slog` with JSON output for structured logging.
-
-## Blueprint Examples
-
-Sandbox blueprint:
-
-```yaml
-apiVersion: smx/v1alpha1
-kind: Blueprint
-metadata:
-  name: python-dev
-  version: "1.0.0"
-spec:
-  base: python:3.12-slim
-  runtime: docker
-  resources:
-    cpu: "2"
-    memory: 2Gi
-    disk: 10Gi
-  setup:
-    - run: pip install poetry ruff mypy
-  toolchains:
-    - name: python-lsp
-      image: smx-toolchains/pylsp:latest
-  workspace:
-    mountPath: /workspace
-  network:
-    expose: [8000]
-```
-
-GPU-enabled blueprint:
-
-```yaml
-apiVersion: smx/v1alpha1
-kind: Blueprint
-metadata:
-  name: gpu-python-dev
-  version: "1.0.0"
-spec:
-  base: nvidia/cuda:12.4.1-runtime-ubuntu22.04
-  runtime: docker
-  resources:
-    cpu: "4"
-    memory: 8Gi
-    gpu:
-      count: 1
-      driver: nvidia
-  setup:
-    - run: pip3 install torch torchvision
-  workspace:
-    mountPath: /workspace
-```
-
-Blueprint with device passthrough and readiness probe:
-
-```yaml
-apiVersion: smx/v1alpha1
-kind: Blueprint
-metadata:
-  name: android-emulator
-  version: "1.0.0"
-spec:
-  base: budtmo/docker-android:emulator_14.0
-  runtime: docker
-  resources:
-    cpu: "4"
-    memory: 8Gi
-  devices:
-    - hostPath: /dev/kvm
-      permissions: "rw"
-    - hostPath: /dev/dri
-      permissions: "rw"
-      optional: true
-  readinessProbe:
-    type: exec
-    command: ["adb", "shell", "getprop", "sys.boot_completed"]
-    initialDelaySec: 10
-    periodSec: 3
-    timeoutSec: 5
-    successThreshold: 1
-    failureThreshold: 40
-  network:
-    expose: [5554, 5555]
-```
-
-Matrix blueprint:
-
-```yaml
-apiVersion: smx/v1alpha1
-kind: Matrix
-metadata:
-  name: fullstack
-members:
-  - name: frontend
-    blueprint: blueprints/node-dev.yaml
-  - name: backend
-    blueprint: blueprints/python-dev.yaml
-```
 
 ## Development
 
@@ -425,9 +653,9 @@ spec:
 | Document | Description |
 |---|---|
 | [Architecture](docs/architecture.md) | System design, core components, data flow |
-| [API Reference](docs/api-reference.md) | All 24 REST API endpoints with examples |
+| [API Reference](docs/api-reference.md) | All 30+ REST API endpoints with examples |
 | [Deployment Guide](docs/deployment.md) | Local, Docker, K8s deployment + monitoring |
-| [SDK Guide](docs/sdk-guide.md) | Python & TypeScript SDK usage |
+| [SDK Guide](docs/sdk-guide.md) | Go, Python & TypeScript SDK usage |
 
 ## Contributing
 
