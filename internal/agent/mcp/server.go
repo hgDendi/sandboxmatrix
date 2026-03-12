@@ -76,6 +76,9 @@ func (s *Server) registerTools() {
 			mcp.WithString("workspace",
 				mcp.Description("Local directory to mount as workspace (optional)"),
 			),
+			mcp.WithString("env",
+				mcp.Description("JSON object of environment variables to set (optional)"),
+			),
 		),
 		s.handleSandboxCreate,
 	)
@@ -372,10 +375,19 @@ func (s *Server) handleSandboxCreate(ctx context.Context, request mcp.CallToolRe
 
 	workspace, _ := args["workspace"].(string)
 
+	// Parse optional env JSON object.
+	var envVars map[string]string
+	if envStr, ok := args["env"].(string); ok && envStr != "" {
+		if err := json.Unmarshal([]byte(envStr), &envVars); err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("invalid env JSON: %v", err)), nil
+		}
+	}
+
 	sb, err := s.ctrl.Create(ctx, controller.CreateOptions{
 		Name:          name,
 		BlueprintPath: blueprintPath,
 		WorkspaceDir:  workspace,
+		Env:           envVars,
 	})
 	if err != nil {
 		return mcp.NewToolResultError(fmt.Sprintf("failed to create sandbox: %v", err)), nil

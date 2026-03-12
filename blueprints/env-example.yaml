@@ -1,0 +1,25 @@
+apiVersion: smx/v1alpha1
+kind: Blueprint
+metadata:
+  name: env-example
+  version: "1.0"
+spec:
+  base: python:3.12-slim
+  runtime: docker
+  resources:
+    cpu: "1"
+    memory: 512Mi
+  env:
+    APP_ENV: development
+    LOG_LEVEL: debug
+  secrets:
+    - name: DATABASE_URL
+      source: env:DATABASE_URL
+    - name: API_KEY
+      source: file:/run/secrets/api_key
+  setup:
+    - run: pip install flask
+  workspace:
+    mountPath: /workspace
+  network:
+    policy: bridge

@@ -41,3 +41,34 @@ export interface VersionInfo {
   os: string;
   arch: string;
 }
+
+export interface FileInfo {
+  name: string;
+  path: string;
+  size: number;
+  isDir: boolean;
+  modTime?: string;
+}
+
+export interface PortMapping {
+  sandboxName: string;
+  containerPort: number;
+  hostPort: number;
+  protocol: string;
+}
+
+export interface InterpretResult {
+  stdout: string;
+  stderr: string;
+  exitCode: number;
+  duration: string;
+  error?: string;
+  files?: any[];
+}
+
+export interface BuildResult {
+  imageId: string;
+  imageTag: string;
+  blueprint: string;
+  cached: boolean;
+}

@@ -1,9 +1,14 @@
 """HTTP client for sandboxMatrix REST API."""
 
+import base64
 import json
 from urllib.request import Request, urlopen
 from urllib.error import HTTPError
-from .models import Sandbox, ExecResult, Matrix, Session
+from urllib.parse import quote
+from .models import (
+    Sandbox, ExecResult, Matrix, Session,
+    FileInfo, PortMapping, InterpretResult, BuildResult,
+)
 from .exceptions import SandboxMatrixError, SandboxNotFoundError
 
 
@@ -131,6 +136,99 @@ class HTTPClient:
 
     def end_session(self, session_id: str) -> None:
         self._request("POST", f"/sessions/{session_id}/end")
+
+    def _request_raw(self, method: str, path: str) -> bytes:
+        """Make an API request and return raw bytes (for binary responses)."""
+        url = f"{self.base_url}/api/v1{path}"
+        req = Request(url, method=method)
+        if self.token:
+            req.add_header("Authorization", f"Bearer {self.token}")
+
+        try:
+            with urlopen(req) as resp:
+                return resp.read()
+        except HTTPError as e:
+            body_text = e.read().decode() if e.fp else ""
+            try:
+                err_data = json.loads(body_text)
+                msg = err_data.get("error", body_text)
+            except json.JSONDecodeError:
+                msg = body_text
+            if e.code == 404:
+                raise SandboxNotFoundError(msg) from e
+            raise SandboxMatrixError(f"API error ({e.code}): {msg}") from e
+
+    # File operations
+    def write_file(self, name: str, path: str, content: bytes | str) -> None:
+        """Write a file to a sandbox."""
+        if isinstance(content, str):
+            content = content.encode()
+        body = {"path": path, "content": base64.b64encode(content).decode()}
+        self._request("PUT", f"/sandboxes/{name}/files", body)
+
+    def read_file(self, name: str, path: str) -> bytes:
+        """Read a file from a sandbox. Returns raw bytes."""
+        return self._request_raw("GET", f"/sandboxes/{name}/files?path={quote(path)}")
+
+    def list_files(self, name: str, path: str = "/") -> list[FileInfo]:
+        """List files in a sandbox directory."""
+        data = self._request("GET", f"/sandboxes/{name}/files/list?path={quote(path)}")
+        return [
+            FileInfo(
+                name=f["name"],
+                path=f["path"],
+                size=f["size"],
+                is_dir=f["isDir"],
+                mod_time=f.get("modTime", ""),
+            )
+            for f in data
+        ]
+
+    # Port operations
+    def list_ports(self, name: str) -> list[PortMapping]:
+        """List exposed ports for a sandbox."""
+        data = self._request("GET", f"/sandboxes/{name}/ports")
+        return [
+            PortMapping(
+                sandbox_name=p["sandboxName"],
+                container_port=p["containerPort"],
+                host_port=p["hostPort"],
+                protocol=p.get("protocol", "tcp"),
+            )
+            for p in data
+        ]
+
+    # Code interpreter
+    def interpret(self, name: str, language: str, code: str, timeout: int = 30) -> InterpretResult:
+        """Run code in a sandbox interpreter."""
+        data = self._request(
+            "POST",
+            f"/sandboxes/{name}/interpret",
+            {"language": language, "code": code, "timeout": timeout},
+        )
+        return InterpretResult(
+            stdout=data["stdout"],
+            stderr=data["stderr"],
+            exit_code=data["exitCode"],
+            duration=data["duration"],
+            error=data.get("error", ""),
+            files=data.get("files"),
+        )
+
+    # Image operations
+    def build_image(self, blueprint: str) -> BuildResult:
+        """Build an image from a blueprint."""
+        data = self._request("POST", "/images/build", {"blueprint": blueprint})
+        return BuildResult(
+            image_id=data["imageId"],
+            image_tag=data["imageTag"],
+            blueprint=data["blueprint"],
+            cached=data.get("cached", False),
+        )
+
+    def list_images(self) -> list:
+        """List built images."""
+        return self._request("GET", "/images")
 
     @staticmethod
     def _parse_sandbox(data: dict) -> Sandbox:

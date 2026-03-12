@@ -41,3 +41,38 @@ class Session:
     sandbox: str
     state: str
     exec_count: int = 0
+
+
+@dataclass
+class FileInfo:
+    name: str
+    path: str
+    size: int
+    is_dir: bool
+    mod_time: str = ""
+
+
+@dataclass
+class PortMapping:
+    sandbox_name: str
+    container_port: int
+    host_port: int
+    protocol: str = "tcp"
+
+
+@dataclass
+class InterpretResult:
+    stdout: str
+    stderr: str
+    exit_code: int
+    duration: str
+    error: str = ""
+    files: list = None
+
+
+@dataclass
+class BuildResult:
+    image_id: str
+    image_tag: str
+    blueprint: str
+    cached: bool = False

@@ -48,7 +48,8 @@ type CreateOptions struct {
 	Name          string
 	BlueprintPath string
 	WorkspaceDir  string
-	NetworkName   string // optional: override network (e.g. for matrix isolation)
+	NetworkName   string            // optional: override network (e.g. for matrix isolation)
+	Env           map[string]string // optional: environment variables to inject (overrides blueprint env)
 }
 
 // buildDeviceConfig converts blueprint device specs into runtime device mappings.
@@ -74,6 +75,31 @@ func buildDeviceConfig(devices []v1alpha1.DeviceMapping) []runtime.DeviceMapping
 			ContainerPath: cPath,
 			Permissions:   perms,
 		})
+	}
+	return result
+}
+
+// resolveSecrets resolves SecretRef values into a map of environment variables.
+// Sources can be "env:<HOST_VAR>" (host environment variable), "file:<path>"
+// (file contents), or a literal value. File read errors are handled gracefully
+// by setting an empty string.
+func resolveSecrets(secrets []v1alpha1.SecretRef) map[string]string {
+	result := make(map[string]string)
+	for _, s := range secrets {
+		if strings.HasPrefix(s.Source, "env:") {
+			envName := strings.TrimPrefix(s.Source, "env:")
+			result[s.Name] = os.Getenv(envName)
+		} else if strings.HasPrefix(s.Source, "file:") {
+			filePath := strings.TrimPrefix(s.Source, "file:")
+			data, err := os.ReadFile(filePath)
+			if err == nil {
+				result[s.Name] = strings.TrimSpace(string(data))
+			} else {
+				result[s.Name] = ""
+			}
+		} else {
+			result[s.Name] = s.Source
+		}
 	}
 	return result
 }
@@ -167,6 +193,21 @@ func (c *Controller) Create(ctx context.Context, opts CreateOptions) (*v1alpha1.
 
 	// Device passthrough.
 	cfg.Devices = buildDeviceConfig(bp.Spec.Devices)
+
+	// Build environment variables: blueprint env -> resolved secrets -> explicit options.
+	envVars := make(map[string]string)
+	for k, v := range bp.Spec.Env {
+		envVars[k] = v
+	}
+	for k, v := range resolveSecrets(bp.Spec.Secrets) {
+		envVars[k] = v
+	}
+	for k, v := range opts.Env {
+		envVars[k] = v
+	}
+	if len(envVars) > 0 {
+		cfg.Env = envVars
+	}
 
 	// Network policy.
 	if opts.NetworkName != "" {

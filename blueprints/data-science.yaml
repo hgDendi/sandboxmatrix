@@ -1,0 +1,16 @@
+apiVersion: smx/v1alpha1
+kind: Blueprint
+metadata:
+  name: data-science
+  version: "1.0"
+spec:
+  extends: base-python.yaml
+  resources:
+    memory: 2Gi
+  setup:
+    - run: pip install pandas numpy matplotlib scikit-learn jupyter
+  env:
+    JUPYTER_PORT: "8888"
+  network:
+    policy: bridge
+    expose: [8888]

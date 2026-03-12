@@ -1,0 +1,20 @@
+apiVersion: smx/v1alpha1
+kind: Blueprint
+metadata:
+  name: base-python
+  version: "1.0"
+spec:
+  base: python:3.12-slim
+  runtime: docker
+  resources:
+    cpu: "1"
+    memory: 512Mi
+  env:
+    PYTHONDONTWRITEBYTECODE: "1"
+    PIP_NO_CACHE_DIR: "1"
+  setup:
+    - run: pip install --upgrade pip
+  workspace:
+    mountPath: /workspace
+  network:
+    policy: bridge

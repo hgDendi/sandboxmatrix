@@ -100,9 +100,10 @@ func handleVersion(w http.ResponseWriter, _ *http.Request) {
 // --------------------------------------------------------------------
 
 type createSandboxRequest struct {
-	Name      string `json:"name"`
-	Blueprint string `json:"blueprint"`
-	Workspace string `json:"workspace,omitempty"`
+	Name      string            `json:"name"`
+	Blueprint string            `json:"blueprint"`
+	Workspace string            `json:"workspace,omitempty"`
+	Env       map[string]string `json:"env,omitempty"`
 }
 
 func handleCreateSandbox(ctrl *controller.Controller) http.HandlerFunc {
@@ -124,6 +125,7 @@ func handleCreateSandbox(ctrl *controller.Controller) http.HandlerFunc {
 			Name:          req.Name,
 			BlueprintPath: req.Blueprint,
 			WorkspaceDir:  req.Workspace,
+			Env:           req.Env,
 		})
 		if err != nil {
 			errorResponse(w, http.StatusInternalServerError, "failed to create sandbox")

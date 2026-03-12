@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"text/tabwriter"
 	"time"
 
@@ -17,6 +18,7 @@ func newSandboxCreateCmdLazy(ctrl **controller.Controller) *cobra.Command {
 		blueprintPath string
 		name          string
 		workspace     string
+		envPairs      []string
 	)
 
 	cmd := &cobra.Command{
@@ -30,11 +32,25 @@ func newSandboxCreateCmdLazy(ctrl **controller.Controller) *cobra.Command {
 				return fmt.Errorf("--name is required")
 			}
 
+			// Parse KEY=VALUE environment variable pairs.
+			var envVars map[string]string
+			if len(envPairs) > 0 {
+				envVars = make(map[string]string, len(envPairs))
+				for _, pair := range envPairs {
+					parts := strings.SplitN(pair, "=", 2)
+					if len(parts) != 2 {
+						return fmt.Errorf("invalid env format %q, expected KEY=VALUE", pair)
+					}
+					envVars[parts[0]] = parts[1]
+				}
+			}
+
 			fmt.Printf("Creating sandbox %q from blueprint %s...\n", name, blueprintPath)
 			sb, err := (*ctrl).Create(context.Background(), controller.CreateOptions{
 				Name:          name,
 				BlueprintPath: blueprintPath,
 				WorkspaceDir:  workspace,
+				Env:           envVars,
 			})
 			if err != nil {
 				return err
@@ -51,6 +67,7 @@ func newSandboxCreateCmdLazy(ctrl **controller.Controller) *cobra.Command {
 	cmd.Flags().StringVarP(&blueprintPath, "blueprint", "b", "", "Path to blueprint YAML file")
 	cmd.Flags().StringVarP(&name, "name", "n", "", "Sandbox name")
 	cmd.Flags().StringVarP(&workspace, "workspace", "w", "", "Local directory to mount as workspace")
+	cmd.Flags().StringArrayVarP(&envPairs, "env", "e", nil, "Environment variables in KEY=VALUE format (can be repeated)")
 	return cmd
 }
 

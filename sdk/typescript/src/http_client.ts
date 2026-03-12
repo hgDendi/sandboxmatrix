@@ -1,4 +1,7 @@
-import type { Sandbox, ExecResult, Matrix, Session, VersionInfo } from "./models";
+import type {
+  Sandbox, ExecResult, Matrix, Session, VersionInfo,
+  FileInfo, PortMapping, InterpretResult, BuildResult,
+} from "./models";
 import { SandboxMatrixError, SandboxNotFoundError } from "./errors";
 
 export interface HTTPClientOptions {
@@ -133,6 +136,79 @@ export class HTTPClient {
 
   async endSession(sessionId: string): Promise<void> {
     await this.request("POST", `/sessions/${encodeURIComponent(sessionId)}/end`);
+  }
+
+  private async requestRaw(method: string, path: string): Promise<string> {
+    const url = `${this.baseURL}/api/v1${path}`;
+    const headers: Record<string, string> = {};
+    if (this.token) {
+      headers["Authorization"] = `Bearer ${this.token}`;
+    }
+
+    const res = await fetch(url, { method, headers });
+    if (!res.ok) {
+      let msg: string;
+      try {
+        const data = await res.json();
+        msg = data?.error ?? JSON.stringify(data);
+      } catch {
+        msg = await res.text();
+      }
+      if (res.status === 404) throw new SandboxNotFoundError(msg);
+      throw new SandboxMatrixError(`API error (${res.status}): ${msg}`);
+    }
+    return res.text();
+  }
+
+  // File operations
+  async writeFile(name: string, path: string, content: string): Promise<void> {
+    const encoded = btoa(content);
+    await this.request("PUT", `/sandboxes/${encodeURIComponent(name)}/files`, {
+      path,
+      content: encoded,
+    });
+  }
+
+  async readFile(name: string, path: string): Promise<string> {
+    return this.requestRaw(
+      "GET",
+      `/sandboxes/${encodeURIComponent(name)}/files?path=${encodeURIComponent(path)}`,
+    );
+  }
+
+  async listFiles(name: string, path: string = "/"): Promise<FileInfo[]> {
+    return this.request(
+      "GET",
+      `/sandboxes/${encodeURIComponent(name)}/files/list?path=${encodeURIComponent(path)}`,
+    );
+  }
+
+  // Port operations
+  async listPorts(name: string): Promise<PortMapping[]> {
+    return this.request("GET", `/sandboxes/${encodeURIComponent(name)}/ports`);
+  }
+
+  // Code interpreter
+  async interpret(
+    name: string,
+    language: string,
+    code: string,
+    timeout: number = 30,
+  ): Promise<InterpretResult> {
+    return this.request("POST", `/sandboxes/${encodeURIComponent(name)}/interpret`, {
+      language,
+      code,
+      timeout,
+    });
+  }
+
+  // Image operations
+  async buildImage(blueprint: string): Promise<BuildResult> {
+    return this.request("POST", "/images/build", { blueprint });
+  }
+
+  async listImages(): Promise<any[]> {
+    return this.request("GET", "/images");
   }
 
   private parseSandbox(data: any): Sandbox {

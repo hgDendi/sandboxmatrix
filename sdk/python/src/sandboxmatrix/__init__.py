@@ -2,7 +2,10 @@
 
 from .client import SandboxMatrixClient
 from .http_client import HTTPClient
-from .models import Sandbox, ExecResult, Snapshot, Matrix, Session
+from .models import (
+    Sandbox, ExecResult, Snapshot, Matrix, Session,
+    FileInfo, PortMapping, InterpretResult, BuildResult,
+)
 from .exceptions import (
     SandboxMatrixError,
     SandboxNotFoundError,
@@ -20,9 +23,20 @@ __all__ = [
     "Snapshot",
     "Matrix",
     "Session",
+    "FileInfo",
+    "PortMapping",
+    "InterpretResult",
+    "BuildResult",
     "SandboxMatrixError",
     "SandboxNotFoundError",
     "SandboxNotRunningError",
     "BlueprintError",
     "CLIError",
 ]
+
+# AI framework integrations (optional)
+try:
+    from .langchain_tools import create_sandbox_tools
+    __all__.append("create_sandbox_tools")
+except ImportError:
+    pass

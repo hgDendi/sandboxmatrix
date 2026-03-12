@@ -1,0 +1,14 @@
+apiVersion: smx/v1alpha1
+kind: Blueprint
+metadata:
+  name: web-api
+  version: "1.0"
+spec:
+  extends: base-python.yaml
+  setup:
+    - run: pip install fastapi uvicorn sqlalchemy
+  env:
+    APP_ENV: development
+  network:
+    policy: bridge
+    expose: [8000]

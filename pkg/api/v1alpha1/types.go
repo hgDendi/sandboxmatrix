@@ -102,17 +102,26 @@ type ProbeConfig struct {
 	FailureThreshold int      `json:"failureThreshold,omitempty" yaml:"failureThreshold,omitempty"`
 }
 
+// SecretRef defines a secret to inject as an environment variable.
+type SecretRef struct {
+	Name   string `json:"name" yaml:"name"`     // env var name
+	Source string `json:"source" yaml:"source"` // "env:<HOST_VAR>", "file:<path>", or literal value
+}
+
 // BlueprintSpec defines the desired state of a sandbox environment.
 type BlueprintSpec struct {
-	Base           string          `json:"base" yaml:"base"`
-	Runtime        string          `json:"runtime" yaml:"runtime"`
-	Resources      Resources       `json:"resources,omitempty" yaml:"resources,omitempty"`
-	Setup          []SetupStep     `json:"setup,omitempty" yaml:"setup,omitempty"`
-	Toolchains     []Toolchain     `json:"toolchains,omitempty" yaml:"toolchains,omitempty"`
-	Workspace      WorkspaceSpec   `json:"workspace,omitempty" yaml:"workspace,omitempty"`
-	Network        NetworkSpec     `json:"network,omitempty" yaml:"network,omitempty"`
-	Devices        []DeviceMapping `json:"devices,omitempty" yaml:"devices,omitempty"`
-	ReadinessProbe *ProbeConfig    `json:"readinessProbe,omitempty" yaml:"readinessProbe,omitempty"`
+	Extends        string            `json:"extends,omitempty" yaml:"extends,omitempty"` // path to parent blueprint
+	Base           string            `json:"base" yaml:"base"`
+	Runtime        string            `json:"runtime" yaml:"runtime"`
+	Resources      Resources         `json:"resources,omitempty" yaml:"resources,omitempty"`
+	Env            map[string]string `json:"env,omitempty" yaml:"env,omitempty"`
+	Secrets        []SecretRef       `json:"secrets,omitempty" yaml:"secrets,omitempty"`
+	Setup          []SetupStep       `json:"setup,omitempty" yaml:"setup,omitempty"`
+	Toolchains     []Toolchain       `json:"toolchains,omitempty" yaml:"toolchains,omitempty"`
+	Workspace      WorkspaceSpec     `json:"workspace,omitempty" yaml:"workspace,omitempty"`
+	Network        NetworkSpec       `json:"network,omitempty" yaml:"network,omitempty"`
+	Devices        []DeviceMapping   `json:"devices,omitempty" yaml:"devices,omitempty"`
+	ReadinessProbe *ProbeConfig      `json:"readinessProbe,omitempty" yaml:"readinessProbe,omitempty"`
 }
 
 // Blueprint defines a reusable sandbox environment template.
